@@ -9,7 +9,17 @@ import type { Db } from './db'
 import type { BackupEntry, BackupManifest } from '../shared/types'
 
 export const BACKUP_SUFFIX = '.glimmr-backup'
-export const ORIGINALS_DIR = 'Glimmr Originals'
+export const ORIGINALS_DIR = 'GLMR Originals'
+/** Names the originals mirror had before the app was renamed GLMR; an existing one keeps being used. */
+const LEGACY_ORIGINALS_DIRS = ['Glimmr Originals', 'GlimmR Originals']
+
+/** The originals mirror folder in a backup destination: an existing legacy-named one, or the current name. */
+export function originalsDir(destination: string): string {
+  const current = path.join(destination, ORIGINALS_DIR)
+  if (fs.existsSync(current)) return current
+  const legacy = LEGACY_ORIGINALS_DIRS.map((d) => path.join(destination, d)).find((p) => fs.existsSync(p))
+  return legacy ?? current
+}
 
 export async function sha256(file: string): Promise<string> {
   const hash = crypto.createHash('sha256')
@@ -54,7 +64,7 @@ export async function createBackup(db: Db, opts: BackupOptions): Promise<BackupE
   const check = db.prepare('PRAGMA integrity_check').get() as Record<string, string>
   if (Object.values(check)[0] !== 'ok') throw new Error('The catalog failed its integrity check; backup stopped so a damaged copy is not saved.')
 
-  const dir = path.join(opts.destination, `Glimmr ${stamp()}${BACKUP_SUFFIX}`)
+  const dir = path.join(opts.destination, `GLMR ${stamp()}${BACKUP_SUFFIX}`)
   const tmp = `${dir}.partial`
   await fs.promises.rm(tmp, { recursive: true, force: true })
   await fs.promises.mkdir(tmp, { recursive: true })
@@ -89,7 +99,7 @@ export async function createBackup(db: Db, opts: BackupOptions): Promise<BackupE
 }
 
 /**
- * Copies every cataloged original (and its XMP sidecar) into `<destination>/Glimmr Originals/<root>/…`.
+ * Copies every cataloged original (and its XMP sidecar) into `<destination>/GLMR Originals/<root>/…`.
  * Files already present with the same size and mtime are skipped; copies are verified by size and checksum.
  */
 async function mirrorOriginals(
@@ -100,6 +110,7 @@ async function mirrorOriginals(
 ): Promise<{ fileCount: number; bytes: number }> {
   const rows = db.prepare('SELECT root_id, rel_path FROM photos WHERE offline = 0').all() as { root_id: number; rel_path: string }[]
   const byId = new Map(roots.map((r) => [r.id, r]))
+  const mirrorDir = originalsDir(destination)
   let done = 0
   let fileCount = 0
   let bytes = 0
@@ -107,7 +118,7 @@ async function mirrorOriginals(
     if (opts.signal?.aborted) throw new Error('Backup cancelled')
     const root = byId.get(row.root_id)!
     const src = path.join(root.path, ...row.rel_path.split('/'))
-    const dst = path.join(destination, ORIGINALS_DIR, mirrorName(root), ...row.rel_path.split('/'))
+    const dst = path.join(mirrorDir, mirrorName(root), ...row.rel_path.split('/'))
     const base = src.slice(0, src.length - path.extname(src).length)
     const pairs: [string, string][] = [[src, dst]]
     for (const side of [`${base}.xmp`, `${src}.xmp`])
@@ -179,7 +190,7 @@ export async function verifyBackup(dir: string): Promise<{ ok: boolean; problems
 
 /** Path of a root's copy inside the originals mirror next to a backup, if it exists. */
 export function mirroredRootPath(backupDir: string, root: { id: number; name: string }): string | null {
-  const p = path.join(path.dirname(backupDir), ORIGINALS_DIR, mirrorName(root))
+  const p = path.join(originalsDir(path.dirname(backupDir)), mirrorName(root))
   return fs.existsSync(p) ? p : null
 }
 

@@ -4,7 +4,7 @@ import path from 'node:path'
 import { openDb } from '../src/main/db'
 import { Library } from '../src/main/library'
 import { scanRoot } from '../src/main/scanner'
-import { createBackup, listBackups, verifyBackup, restoreCatalogFile, mirroredRootPath } from '../src/main/backup'
+import { createBackup, listBackups, verifyBackup, restoreCatalogFile, mirroredRootPath, originalsDir } from '../src/main/backup'
 import { mergeSidecar, buildSidecar } from '../src/main/xmp'
 import { readMetadata } from '../src/main/metadata'
 import { editorFor, mergeEditors, resolvePattern } from '../src/main/editors'
@@ -62,6 +62,17 @@ describe('backup and restore', () => {
     expect(v.ok).toBe(false)
     expect(v.problems[0]).toMatch(/checksum/)
     await expect(restoreCatalogFile(entry.path, path.join(dir, 'other.db'), {})).rejects.toThrow(/verification/)
+  })
+})
+
+describe('renamed originals mirror', () => {
+  it('keeps using a mirror made before the app was renamed GLMR', () => {
+    const dest = tmpDir()
+    const legacy = path.join(dest, 'Glimmr Originals', '1-Photos')
+    fs.mkdirSync(legacy, { recursive: true })
+    expect(originalsDir(dest)).toBe(path.join(dest, 'Glimmr Originals'))
+    expect(mirroredRootPath(path.join(dest, 'GLMR 2026-10-26 20-00-00.glimmr-backup'), { id: 1, name: 'Photos' })).toBe(legacy)
+    expect(originalsDir(tmpDir())).toMatch(/GLMR Originals$/)
   })
 })
 

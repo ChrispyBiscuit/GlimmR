@@ -1,10 +1,10 @@
 {
   "name": "glimmr",
-  "productName": "Glimmr",
+  "productName": "GLMR",
   "version": "1.0.1",
   "description": "A calm, fast desktop library to store, organize, search and view your photos.",
   "main": "./out/main/index.js",
-  "author": "Glimmr",
+  "author": "GLMR",
   "license": "Apache-2.0",
   "private": true,
   "scripts": {
@@ -25,7 +25,7 @@
   },
   "devDependencies": {
     "@fontsource-variable/archivo": "^5.3.0",
-    "@fontsource/unbounded": "^5.3.0",
+    "@fontsource/rubik-mono-one": "^5.3.0",
     "@tailwindcss/vite": "^4.3.3",
     "@tanstack/react-virtual": "^3.14.23",
     "@types/node": "^26.6.5",

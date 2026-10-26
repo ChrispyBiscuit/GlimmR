@@ -279,7 +279,7 @@ export function createApi(ctx: AppContext): Api {
     listBackups: () => listBackups(lib().getSettings().backup.destination),
     chooseBackupToRestore: async () => {
       const r = await dialog.showOpenDialog(ctx.window!, {
-        title: 'Choose a Glimmr backup folder (ends in .glimmr-backup)',
+        title: 'Choose a GLMR backup folder (ends in .glimmr-backup)',
         defaultPath: lib().getSettings().backup.destination ?? undefined,
         properties: ['openDirectory']
       })

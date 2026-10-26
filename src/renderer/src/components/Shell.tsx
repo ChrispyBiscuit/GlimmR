@@ -67,7 +67,7 @@ export function Shell() {
               <EmptyHeader>
                 <EmptyTitle className="display text-2xl">Bring your photos in</EmptyTitle>
                 <EmptyDescription className="text-pretty">
-                  Choose the folders where your photos already live. Glimmr catalogs them in place and never moves or changes a file. You can also drop
+                  Choose the folders where your photos already live. GLMR catalogs them in place and never moves or changes a file. You can also drop
                   folders onto this window.
                 </EmptyDescription>
               </EmptyHeader>

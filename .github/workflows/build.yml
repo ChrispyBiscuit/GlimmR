@@ -1,4 +1,4 @@
-# Builds Glimmr installers for Windows and macOS on every push, and publishes a GitHub release
+# Builds GLMR installers for Windows and macOS on every push, and publishes a GitHub release
 # (which installed apps auto-update from) when:
 #   - a version tag like v1.2.0 is pushed, or
 #   - a pushed commit's message contains [release], or
@@ -79,7 +79,7 @@ jobs:
           TAG: ${{ steps.tag.outputs.tag }}
         run: |
           gh release view "$TAG" >/dev/null 2>&1 || \
-            gh release create "$TAG" --draft --target "$GITHUB_SHA" --title "Glimmr ${TAG#v}" --generate-notes
+            gh release create "$TAG" --draft --target "$GITHUB_SHA" --title "GLMR ${TAG#v}" --generate-notes
 
   build:
     name: Build (${{ matrix.name }})
@@ -136,7 +136,7 @@ jobs:
           npx electron-builder "${ARGS[@]}"
       - uses: actions/upload-artifact@v4
         with:
-          name: Glimmr-${{ matrix.name }}
+          name: GLMR-${{ matrix.name }}
           path: |
             dist/*.exe
             dist/*.dmg

@@ -1,13 +1,13 @@
-# Glimmr
+# GLMR
 
-**A calm, fast desktop library for your photos.** Glimmr stores, sorts, organizes, searches and shows a personal
+**A calm, fast desktop library for your photos.** GLMR stores, sorts, organizes, searches and shows a personal
 photo collection on Windows and macOS. It browses like a stock-media site (one big search box, a filter bar and a
 grid of photos at their true shapes) and hands photos to Lightroom, Capture One or any editor you choose. It does not
 edit photos.
 
 ![Rediscover](docs/screenshots/02-rediscover.png)
 
-- **Your files stay where they are.** Add folders; Glimmr catalogs them in place and never moves, renames or
+- **Your files stay where they are.** Add folders; GLMR catalogs them in place and never moves, renames or
   modifies originals.
 - **Search by anything.** Free text over every field, plus `camera:"X-T5"`, `iso:>1600`, `focal:24..70`,
   `date:2019-07`, `rating:>=4`, `-keyword:test`, and any raw EXIF/IPTC/XMP key such as `ExposureProgram:Manual`.
@@ -41,8 +41,8 @@ correctly, every photo keeps its real shape in justified rows grouped by month, 
 through time. It's built with shadcn/ui (Radix) and Tailwind CSS v4, and checked against Vercel's Web Interface
 Guidelines and Anthropic's frontend-design guidance.
 
-The wordmark is set in **Unbounded Black**, an open-licence face with an Akira Expanded feel. The app icon is its "G"
-(`npm run icon` regenerates it). All other text is **Archivo**, whose width axis gives headings the same wide
+The wordmark is set in **Rubik Mono One**, a wide, heavy open-licence face in the spirit of Akira Expanded. The app
+icon is its "G" (`npm run icon` regenerates it). All other text is **Archivo**, whose width axis gives headings the same wide
 proportions. Both fonts are SIL OFL and ship with the app.
 
 ## Run it
@@ -63,8 +63,8 @@ npm run typecheck
 GitHub Actions (`.github/workflows/build.yml`) runs on every push:
 
 1. Typecheck and tests on Linux.
-2. **Windows** installer (`Glimmr-<version>-Windows-Setup.exe`, x64 and ARM in one installer) built on Windows.
-3. **macOS** disk images for Apple Silicon and Intel (`Glimmr-<version>-macOS-arm64.dmg` / `-x64.dmg`) built on macOS.
+2. **Windows** installer (`GLMR-<version>-Windows-Setup.exe`, x64 and ARM in one installer) built on Windows.
+3. **macOS** disk images for Apple Silicon and Intel (`GLMR-<version>-macOS-arm64.dmg` / `-x64.dmg`) built on macOS.
 
 Branch builds attach the installers to the workflow run (Actions tab → run → Artifacts).
 
@@ -72,7 +72,7 @@ To build locally on the matching OS: `npm run dist:win` or `npm run dist:mac`.
 
 ### Publishing an update
 
-Installed copies of Glimmr check this repository's **GitHub Releases** shortly after they start and every 4 hours.
+Installed copies of GLMR check this repository's **GitHub Releases** shortly after they start and every 4 hours.
 They download new versions in the background and offer **Restart to Update** in the sidebar and in
 Settings → Updates.
 
@@ -123,7 +123,7 @@ Electron main (Node)                                    Renderer (React + shadcn
 - **Catalog**: `photos` (normalized fields), `metadata` (every EXIF/IPTC/XMP key/value, numeric values typed for
   comparisons and sorting), `keywords` (hierarchical, `Places>Portugal>Lisbon`), `albums`, `smart_albums`,
   `settings`, and a full-text index over all text.
-- **Previews**: RAW files are never decoded. Glimmr extracts the largest embedded JPEG, which is why browsing
+- **Previews**: RAW files are never decoded. GLMR extracts the largest embedded JPEG, which is why browsing
   RAW is fast. HEIC falls back to the embedded thumbnail, or to `sips` on macOS. Formats Chromium can't display
   are viewed through 2560 px previews; JPEG, PNG, WebP and AVIF show the original at 100% zoom.
 - **Your data**: the catalog lives in the app-data folder (`%APPDATA%\Glimmr\Library` or

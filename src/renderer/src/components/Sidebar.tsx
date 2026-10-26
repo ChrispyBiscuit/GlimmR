@@ -141,8 +141,8 @@ export function Sidebar({ onAddFolder }: { onAddFolder: () => void }) {
   return (
     <aside className="flex min-h-0 flex-col border-r bg-panel" aria-label="Library">
       <div className={cn('app-drag flex h-12 shrink-0 items-center justify-center border-b px-4', mac && 'h-16 items-end pb-3')}>
-        <span className="brand text-[17px] leading-none" aria-label="Glimmr">
-          Glimmr
+        <span className="brand text-[19px] leading-none" aria-label="GLMR">
+          GLMR
         </span>
       </div>
       <nav className="scroll-thin min-h-0 flex-1 overflow-y-auto px-2 pb-4">

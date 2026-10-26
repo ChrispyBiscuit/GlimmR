@@ -10,7 +10,7 @@ export function UpdateNotice() {
   if (!update || !['available', 'downloading', 'ready', 'manual'].includes(update.state)) return null
   return (
     <div className="flex flex-col gap-2 border-t px-4 py-3" aria-live="polite">
-      <p className="text-[13px] font-medium">Glimmr {update.version}</p>
+      <p className="text-[13px] font-medium">GLMR {update.version}</p>
       {update.state === 'downloading' && (
         <>
           <Progress value={update.percent ?? 0} className="h-1" aria-label="Download progress" />

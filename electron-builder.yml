@@ -1,6 +1,6 @@
 appId: app.glimmr.desktop
-productName: Glimmr
-copyright: Copyright © 2026 Glimmr
+productName: GLMR
+copyright: Copyright © 2026 GLMR
 directories:
   output: dist
   buildResources: build
@@ -27,7 +27,7 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: Glimmr
+  shortcutName: GLMR
 
 mac:
   icon: build/icon.png

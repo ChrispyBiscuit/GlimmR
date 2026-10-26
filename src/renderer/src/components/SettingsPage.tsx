@@ -57,7 +57,7 @@ function Setting({ label, description, htmlFor, children }: { label: string; des
 function LibrarySection() {
   const s = useStore()
   return (
-    <Page title="Library" intro="Glimmr catalogs photos where they already are. It never moves, renames or edits your files.">
+    <Page title="Library" intro="GLMR catalogs photos where they already are. It never moves, renames or edits your files.">
       <ul className="divide-y rounded-md border bg-raised">
         {s.roots.length === 0 && <li className="p-4 text-[13px] text-ink-muted">No folders yet.</li>}
         {s.roots.map((r) => (
@@ -113,12 +113,12 @@ function LibrarySection() {
         </Button>
       </div>
       <div>
-        <Setting label="Read marks from files again" description="Re-imports stars, labels, keywords, titles and captions from photos and XMP sidecars, replacing changes made in Glimmr.">
+        <Setting label="Read marks from files again" description="Re-imports stars, labels, keywords, titles and captions from photos and XMP sidecars, replacing changes made in GLMR.">
           <Button
             variant="outline"
             size="sm"
             onClick={async () => {
-              if (await confirmDialog({ title: 'Read marks from files again?', description: 'Changes made in Glimmr are replaced by what’s in the files.', confirmLabel: 'Read From Files', destructive: true }))
+              if (await confirmDialog({ title: 'Read marks from files again?', description: 'Changes made in GLMR are replaced by what’s in the files.', confirmLabel: 'Read From Files', destructive: true }))
                 api.rescan(undefined, true)
             }}
           >
@@ -179,7 +179,7 @@ function EditorsSection() {
       title="Editors"
       intro={
         <>
-          Glimmr doesn’t edit photos. Press <Kbd>{mac ? '⌘' : 'Ctrl'}&nbsp;E</Kbd> to open the selection in your editor. Lightroom Classic and Capture One open their import window for files that
+          GLMR doesn’t edit photos. Press <Kbd>{mac ? '⌘' : 'Ctrl'}&nbsp;E</Kbd> to open the selection in your editor. Lightroom Classic and Capture One open their import window for files that
           aren’t in their catalog yet.
         </>
       }
@@ -421,7 +421,7 @@ function BackupSection() {
             </SelectContent>
           </Select>
         </Setting>
-        <Setting label="Include originals" description="Keeps a copy of every photo in “Glimmr Originals” in the backup folder. Only new or changed files are copied, and every copy is verified." htmlFor="originals">
+        <Setting label="Include originals" description="Keeps a copy of every photo in “GLMR Originals” in the backup folder. Only new or changed files are copied, and every copy is verified." htmlFor="originals">
           <Switch id="originals" checked={b.includeOriginals} onCheckedChange={(v) => save({ includeOriginals: v })} />
         </Setting>
       </div>
@@ -517,7 +517,7 @@ function UpdatesSection() {
   const s = useStore()
   const u = s.update
   const status: Record<string, string> = {
-    idle: 'Glimmr checks for updates shortly after it starts and every few hours.',
+    idle: 'GLMR checks for updates shortly after it starts and every few hours.',
     dev: 'This is a development build. Installed builds check GitHub for updates.',
     checking: 'Checking for updates…',
     none: `You’re on the latest version${u?.checkedAt ? ` (checked ${fmtDate(u.checkedAt, { timeStyle: 'short' })})` : ''}.`,
@@ -528,9 +528,9 @@ function UpdatesSection() {
     error: `The update check didn’t work: ${u?.message ?? 'unknown error'}. Check your connection and try again.`
   }
   return (
-    <Page title="Updates" intro="New versions are published as GitHub releases. Glimmr downloads them in the background and installs them when you restart.">
+    <Page title="Updates" intro="New versions are published as GitHub releases. GLMR downloads them in the background and installs them when you restart.">
       <div>
-        <Setting label={`Glimmr ${u?.currentVersion ?? ''}`} description={status[u?.state ?? 'idle']}>
+        <Setting label={`GLMR ${u?.currentVersion ?? ''}`} description={status[u?.state ?? 'idle']}>
           {u?.state === 'ready' ? (
             <Button size="sm" onClick={() => api.installUpdate()}>
               Restart to Update
@@ -549,7 +549,7 @@ function UpdatesSection() {
             </Button>
           )}
         </Setting>
-        <Setting label="Download updates automatically" description="When off, Glimmr tells you about a new version and waits for you to download it." htmlFor="auto-update">
+        <Setting label="Download updates automatically" description="When off, GLMR tells you about a new version and waits for you to download it." htmlFor="auto-update">
           <Switch id="auto-update" checked={s.settings!.autoUpdate} onCheckedChange={(v) => s.setSettings({ autoUpdate: v })} />
         </Setting>
         <Setting label="Release notes" description="See what changed in each version.">

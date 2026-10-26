@@ -1,4 +1,4 @@
-# Glimmr: UI Design
+# GLMR: UI Design
 
 This document replaces the first Ant Design UI. The renderer is now **shadcn/ui (Radix) + Tailwind CSS v4**, chosen
 because its components live in the repository as source and the look can be fully custom. It follows the practices used by current agent UI standards:
@@ -58,9 +58,9 @@ the way a loupe or china marker circles a frame on a contact sheet.
 
 The wordmark sets the voice and everything else is tuned to it.
 
-- **Unbounded Black** (SIL Open Font License) is used for the **Glimmr wordmark only**, always in caps. It was
-  chosen as the closest open-licence match to Akira Expanded, the requested look: very wide, very heavy, flat
-  terminals and rounded-square geometry. Because it's OFL, it's bundled with the app and committed to the repo.
+- **Rubik Mono One** (SIL Open Font License) is used for the **GLMR wordmark only**, always in caps. It was
+  chosen as an open-licence stand-in for Akira Expanded, the requested look: wide, heavy, flat terminals and
+  rounded-square geometry. Because it's OFL, it's bundled with the app and committed to the repo.
   The app icon is its "G", converted to an outline.
 - **Archivo** (variable, with width and weight axes, OFL) is used for everything else. Its width axis lets one family
   echo the wordmark's wide proportions:
@@ -79,7 +79,7 @@ argued with the wordmark's geometry.
 
 ```
 ┌──────────────┬───────────────────────────────────────────────────────────┐
-│ GlimmR       │ [⌕ Search photos…                              Ctrl K ] ⚙ │
+│ GLMR         │ [⌕ Search photos…                              Ctrl K ] ⚙ │
 │              │ Date ▾  Rating ▾  Camera ▾  Lens ▾  Keywords ▾  More ▾  │ ← Artlist-style filter bar
 │ Rediscover   │ [ISO 1600–12800 ×] [X-T5 ×]   1,204 photos   Sort ▾  ▭▭ │
 │ Photos       ├───────────────────────────────────────────────────────┬───┤
@@ -114,7 +114,7 @@ Text is left-aligned throughout. Numbers use tabular figures.
 
 1. **Photos are the interface.** Chrome is quiet, grey and recedes. No decorative gradients, cards or shadows on the canvas.
 2. **Time is the spine.** Dates are always visible, and jumping across years is one gesture.
-3. **One bold voice.** Unbounded for the name, expanded Archivo for time and place, and nothing else shouts.
+3. **One bold voice.** Rubik Mono One for the name, expanded Archivo for time and place, and nothing else shouts.
 4. **Marks, not decoration.** Colour only means something: rating, pick, reject or label.
 5. **Keyboard first, accessible always.** Visible `:focus-visible` rings, labelled icon buttons, real buttons,
    `prefers-reduced-motion` respected, hit targets of at least 28 px in dense UI.
@@ -123,7 +123,7 @@ Text is left-aligned throughout. Numbers use tabular figures.
 
 - *Is the palette a generated default?* No. Neutral grey is a functional requirement for judging photo colour, and
   the near-black and single-accent template is gone.
-- *Is the type default?* No. The wordmark matches the requested Akira Expanded look using Unbounded Black. Archivo was chosen because its width
+- *Is the type default?* No. The wordmark matches the requested Akira Expanded look using Rubik Mono One. Archivo was chosen because its width
   axis can match it, and it has tabular figures for camera data.
 - *Are there template tells?* No all-caps eyebrows, no stat tiles, no middle-dot meta strings, no arrows appended to links,
   no cards on the canvas.

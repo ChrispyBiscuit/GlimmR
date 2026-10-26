@@ -1,5 +1,5 @@
 // Generates the app icon (build/icon.svg and build/icon.png, 1024×1024); electron-builder turns the PNG into
-// .icns and .ico. The mark is the "G" from Unbounded Black (the wordmark's font, SIL OFL), converted to an
+// .icns and .ico. The mark is the "G" from Rubik Mono One (the wordmark's font, SIL OFL), converted to an
 // outline so no font ships in the icon. Layout follows Apple's macOS grid: an 824×824 rounded square inset 100 px.
 //
 //   node scripts/make-icon.mjs           → build/icon.svg + build/icon.png
@@ -11,7 +11,7 @@ import opentype from 'opentype.js'
 import sharp from 'sharp'
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
-const font = opentype.parse(fs.readFileSync(path.join(root, 'node_modules/@fontsource/unbounded/files/unbounded-latin-900-normal.woff')))
+const font = opentype.parse(fs.readFileSync(path.join(root, 'node_modules/@fontsource/rubik-mono-one/files/rubik-mono-one-latin-400-normal.woff')))
 const withCrop = process.argv.includes('--crop')
 const out = process.argv.find((a) => a.startsWith('--out='))?.slice(6) ?? path.join(root, 'build/icon')
 
