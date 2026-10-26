@@ -1,0 +1,159 @@
+# Builds Glimmr installers for Windows and macOS on every push, and publishes a GitHub release
+# (which installed apps auto-update from) when:
+#   - a version tag like v1.2.0 is pushed, or
+#   - a pushed commit's message contains [release], or
+#   - the workflow is run by hand with "release" ticked.
+# The last two tag v<package.json version> themselves.
+#
+# Optional repository secrets:
+#   macOS signing + notarization: MAC_CSC_LINK, MAC_CSC_KEY_PASSWORD, APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID
+#   Windows signing:              WIN_CSC_LINK, WIN_CSC_KEY_PASSWORD
+# Without them, builds are unsigned (macOS builds are ad-hoc signed).
+
+name: Build
+
+on:
+  push:
+    branches: [main, 'claude/**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: Publish a release for the version in package.json
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  # Never cancel a release run part-way.
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') && !contains(github.event.head_commit.message, '[release]') && inputs.release != true }}
+
+env:
+  IS_RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') || inputs.release == true || (github.event_name == 'push' && contains(github.event.head_commit.message, '[release]')) }}
+
+jobs:
+  test:
+    name: Typecheck and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+  prepare-release:
+    name: Prepare release
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.release == true || (github.event_name == 'push' && contains(github.event.head_commit.message, '[release]'))
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Work out the release tag
+        id: tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v$(node -p "require('./package.json').version")"
+          if [ "$GITHUB_REF_TYPE" = "tag" ] && [ "$TAG" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME doesn't match package.json version $TAG. Bump the version before tagging."
+            exit 1
+          fi
+          if [ "$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null)" = "false" ]; then
+            echo "::error::$TAG is already published. Bump the version in package.json first."
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+      - name: Create a draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          gh release view "$TAG" >/dev/null 2>&1 || \
+            gh release create "$TAG" --draft --target "$GITHUB_SHA" --title "Glimmr ${TAG#v}" --generate-notes
+
+  build:
+    name: Build (${{ matrix.name }})
+    needs: [test, prepare-release]
+    if: ${{ !failure() && !cancelled() }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+            platform: win
+            sharp: win32 x64 arm64
+          - name: macOS
+            os: macos-latest
+            platform: mac
+            sharp: darwin arm64 x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Add sharp binaries for every target architecture
+        run: node scripts/add-sharp-arch.mjs ${{ matrix.sharp }}
+      - run: npm run build
+      - name: Package installers
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          MAC_CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          ARGS=(--${{ matrix.platform }})
+          if [ "$IS_RELEASE" = "true" ]; then ARGS+=(--publish always); else ARGS+=(--publish never); fi
+          if [ "${{ matrix.platform }}" = "mac" ]; then
+            if [ -n "$MAC_CSC_LINK" ]; then
+              export CSC_LINK="$MAC_CSC_LINK" CSC_KEY_PASSWORD="$MAC_CSC_KEY_PASSWORD"
+            else
+              # No certificate: ad-hoc sign so the app runs on Apple Silicon. Updates then need a manual download on macOS.
+              export CSC_IDENTITY_AUTO_DISCOVERY=false
+              ARGS+=(-c.mac.identity=-)
+            fi
+          else
+            if [ -n "$WIN_CSC_LINK" ]; then export CSC_LINK="$WIN_CSC_LINK" CSC_KEY_PASSWORD="$WIN_CSC_KEY_PASSWORD"; fi
+          fi
+          npx electron-builder "${ARGS[@]}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Glimmr-${{ matrix.name }}
+          path: |
+            dist/*.exe
+            dist/*.dmg
+            dist/*.zip
+            dist/*.blockmap
+            dist/latest*.yml
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish release
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.release == true || (github.event_name == 'push' && contains(github.event.head_commit.message, '[release]'))
+    needs: [prepare-release, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish the draft so installed apps see the update
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.prepare-release.outputs.tag }}
+        # Publishing creates the tag (at the commit that was built) if it doesn't exist yet.
+        run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest

@@ -1,0 +1,165 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+/* Archivo's width axis (62–125%) lets headings share the expanded proportions of the Akira wordmark. */
+@import '@fontsource-variable/archivo/wdth.css';
+
+/* Neutral, zero-hue greys: tinted backgrounds shift how photo colour is perceived. See docs/DESIGN.md. */
+:root {
+  --canvas: #ebebeb;
+  --panel: #f7f7f7;
+  --raised: #ffffff;
+  --line: #d6d6d6;
+  --ink: #1a1a1a;
+  --ink-muted: #666666;
+  --marker: #b8860b;
+  --pick: #2f9e6b;
+  --reject: #d23f37;
+
+  --background: var(--panel);
+  --foreground: var(--ink);
+  --card: var(--raised);
+  --card-foreground: var(--ink);
+  --popover: var(--raised);
+  --popover-foreground: var(--ink);
+  --primary: var(--ink);
+  --primary-foreground: var(--raised);
+  --secondary: #e6e6e6;
+  --secondary-foreground: var(--ink);
+  --muted: #ececec;
+  --muted-foreground: var(--ink-muted);
+  --accent: #e3e3e3;
+  --accent-foreground: var(--ink);
+  --destructive: var(--reject);
+  --border: var(--line);
+  --input: var(--line);
+  --ring: #1a1a1a;
+  --radius: 0.375rem;
+  color-scheme: light;
+}
+
+.dark {
+  --canvas: #232323;
+  --panel: #1b1b1b;
+  --raised: #2e2e2e;
+  --line: #3a3a3a;
+  --ink: #ededed;
+  --ink-muted: #9c9c9c;
+  --marker: #f2c744;
+  --pick: #4cc38a;
+  --reject: #e5534b;
+
+  --secondary: #2a2a2a;
+  --muted: #2a2a2a;
+  --accent: #383838;
+  --ring: #ededed;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --font-sans: 'Archivo Variable', 'Segoe UI', system-ui, sans-serif;
+  /* Akira Expanded is loaded at runtime when available (see fonts.ts); Archivo at full width stands in. */
+  --font-brand: 'Akira Expanded', 'Archivo Variable', 'Segoe UI', sans-serif;
+  --color-canvas: var(--canvas);
+  --color-panel: var(--panel);
+  --color-raised: var(--raised);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-marker: var(--marker);
+  --color-pick: var(--pick);
+  --color-reject: var(--reject);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-label-red: #e5534b;
+  --color-label-yellow: #e6b422;
+  --color-label-green: #46a758;
+  --color-label-blue: #3e8ed0;
+  --color-label-purple: #8e6bd8;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+    /* clip, not hidden: focus() and scrollIntoView must never scroll the app frame */
+    overflow: clip;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-size: 13px;
+    user-select: none;
+  }
+  input,
+  textarea,
+  .selectable {
+    user-select: text;
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  .app-drag {
+    -webkit-app-region: drag;
+  }
+  .app-drag :is(button, input, [role='combobox'], a) {
+    -webkit-app-region: no-drag;
+  }
+  .scroll-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--line) transparent;
+  }
+  /* The wordmark: Akira Expanded, always caps. The fallback is pushed to Archivo's widest, heaviest cut. */
+  .brand {
+    font-family: var(--font-brand);
+    font-stretch: 125%;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+  /* Display type for time and place: Archivo expanded, echoing the wordmark without shouting. */
+  .display {
+    font-family: var(--font-sans);
+    font-stretch: 125%;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+}
