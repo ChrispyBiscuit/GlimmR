@@ -12,6 +12,7 @@ import { api } from '../api'
 import { confirmDialog, promptDialog } from '../dialogs'
 import { fmtNum } from '../format'
 import type { FolderNode, KeywordNode, Scope } from '../../../shared/types'
+import { UpdateNotice } from './UpdateNotice'
 
 const mac = navigator.userAgent.includes('Mac')
 
@@ -345,6 +346,7 @@ export function Sidebar({ onAddFolder }: { onAddFolder: () => void }) {
           ))}
         </div>
       )}
+      <UpdateNotice />
     </aside>
   )
 }

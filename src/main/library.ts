@@ -26,6 +26,7 @@ import type {
 
 export const DEFAULT_SETTINGS: AppSettings = {
   theme: 'dark',
+  autoUpdate: true,
   thumbSize: 220,
   autoAdvance: false,
   editors: { editors: [], defaultEditor: null, perType: {} },

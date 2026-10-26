@@ -1,26 +1,58 @@
 appId: app.glimmr.desktop
 productName: Glimmr
+copyright: Copyright © 2026 Glimmr
 directories:
   output: dist
   buildResources: build
 files:
   - out/**
   - package.json
-# sharp ships native libvips binaries that must stay outside the asar archive.
+# No native modules need rebuilding: SQLite is built into Electron (node:sqlite) and sharp ships prebuilt binaries.
+npmRebuild: false
+# sharp loads libvips binaries at runtime, so they must stay outside the asar archive.
 asarUnpack:
   - node_modules/sharp/**
   - node_modules/@img/**
+
 win:
+  icon: build/icon.png
   target:
     - target: nsis
       arch: [x64, arm64]
 nsis:
+  # One installer for both architectures; it installs the right one.
+  artifactName: ${productName}-${version}-Windows-Setup.${ext}
   oneClick: false
+  perMachine: false
   allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Glimmr
+
 mac:
+  icon: build/icon.png
   category: public.app-category.photography
+  hardenedRuntime: true
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
   target:
-    # Separate builds per architecture: sharp's native binaries differ between them.
     - target: dmg
       arch: [arm64, x64]
-  hardenedRuntime: true
+    - target: zip
+      arch: [arm64, x64]
+dmg:
+  artifactName: ${productName}-${version}-macOS-${arch}.${ext}
+  title: ${productName} ${version}
+
+linux:
+  icon: build/icon.png
+  category: Graphics
+  target: [AppImage]
+
+# Auto-update: CI uploads installers and latest*.yml to a GitHub release for each version tag.
+# Releases start as drafts and are published only after every platform has uploaded.
+publish:
+  provider: github
+  owner: ChrispyBiscuit
+  repo: GlimmR
+  releaseType: draft

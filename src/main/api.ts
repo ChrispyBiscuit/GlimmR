@@ -11,12 +11,17 @@ import { detectEditors, editorFor, launchEditor, mergeEditors } from './editors'
 import { createBackup, listBackups, mirroredRootPath, readBackup, restoreCatalogFile, verifyBackup } from './backup'
 import type { Api } from '../shared/api'
 import type { Editor, JobProgress } from '../shared/types'
+import { Updater } from './updater'
 
 export class AppContext {
   library: Library
   window: BrowserWindow | null = null
   private jobs = new Map<string, { progress: JobProgress; abort: AbortController }>()
   private scanQueue: Promise<void> = Promise.resolve()
+  readonly updater = new Updater(
+    (s) => this.emit('update', s),
+    () => this.library.getSettings().autoUpdate
+  )
   /** Resolves when the catalog is usable; requests wait on it while a restore swaps the catalog file. */
   ready: Promise<void> = Promise.resolve()
 
@@ -288,6 +293,11 @@ export function createApi(ctx: AppContext): Api {
     chooseFolder: (title) => pickFolder(title),
     restore: (plan) => ctx.restore(plan.backupPath, plan.rootMap),
     appVersion: () => app.getVersion(),
+    updateStatus: () => ctx.updater.get(),
+    checkForUpdates: () => ctx.updater.check(),
+    downloadUpdate: () => ctx.updater.download(),
+    installUpdate: () => ctx.updater.install(),
+    openReleasePage: () => ctx.updater.openReleasePage(),
     brandFont: () => {
       const dir = path.join(__dirname, '../renderer/fonts')
       const file = ['akira-expanded.woff2', 'akira-expanded.otf', 'akira-expanded.ttf'].find((f) => fs.existsSync(path.join(dir, f)))

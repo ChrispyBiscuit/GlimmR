@@ -13,10 +13,13 @@
     "start": "electron-vite preview",
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
     "test": "vitest run",
-    "dist:win": "electron-vite build && electron-builder --win",
-    "dist:mac": "electron-vite build && electron-builder --mac"
+    "dist:win": "electron-vite build && electron-builder --win --publish never",
+    "dist:mac": "electron-vite build && electron-builder --mac --publish never",
+    "icon": "node scripts/make-icon.mjs",
+    "dist:linux": "electron-vite build && electron-builder --linux --publish never"
   },
   "dependencies": {
+    "electron-updater": "^6.8.11",
     "exifr": "^7.1.3",
     "sharp": "^0.35.5"
   },
@@ -46,5 +49,10 @@
     "typescript": "^7.0.2",
     "vite": "^8.3.5",
     "vitest": "^5.0.5"
+  },
+  "homepage": "https://github.com/ChrispyBiscuit/GlimmR",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ChrispyBiscuit/GlimmR.git"
   }
 }

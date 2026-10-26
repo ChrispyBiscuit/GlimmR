@@ -12,7 +12,8 @@ import type {
   Root,
   Scope,
   SmartAlbum,
-  SortSpec
+  SortSpec,
+  UpdateStatus
 } from '../../shared/types'
 
 export type View = 'rediscover' | 'browse' | 'settings'
@@ -48,6 +49,7 @@ function useStoreValue() {
   const [keywords, setKeywords] = useState<KeywordNode[]>([])
   const [folders, setFolders] = useState<FolderNode[]>([])
   const [jobs, setJobs] = useState<Record<string, JobProgress>>({})
+  const [update, setUpdate] = useState<UpdateStatus | null>(null)
   const [libraryVersion, setLibraryVersion] = useState(0)
   // Bumped on catalog edits: refreshes facet counts without re-running (and re-sorting) the search.
   const [editVersion, setEditVersion] = useState(0)
@@ -70,6 +72,8 @@ function useStoreValue() {
 
   useEffect(() => {
     void api.getSettings().then(setSettingsState)
+    void api.updateStatus().then(setUpdate)
+    const offUpdate = bridge().onUpdate(setUpdate)
     void refreshSidebar()
     const offJob = bridge().onJob((p) => {
       setJobs((j) => {
@@ -80,6 +84,8 @@ function useStoreValue() {
       if (p.finished) {
         // Jobs can change settings in the main process (e.g. last backup time).
         void api.getSettings().then(setSettingsState)
+    void api.updateStatus().then(setUpdate)
+    const offUpdate = bridge().onUpdate(setUpdate)
         if (p.error) toast.error(p.label, { description: p.error, duration: 8000 })
         else if (p.kind !== 'scan' || (p.message && !p.message.startsWith('0 new, 0 updated'))) toast.success(p.label, { description: p.message })
       }
@@ -97,6 +103,7 @@ function useStoreValue() {
     return () => {
       offJob()
       offLib()
+      offUpdate()
     }
   }, [refreshSidebar])
 
@@ -252,6 +259,7 @@ function useStoreValue() {
     folders,
     refreshSidebar,
     jobs,
+    update,
     libraryVersion,
     editVersion,
     refreshResults,

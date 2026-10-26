@@ -59,12 +59,48 @@ npm test           # unit + integration tests (catalog, search, scanning, backup
 npm run typecheck
 ```
 
-Installers (build on the target OS so the right native image library is bundled):
+### Installers and automatic builds
+
+GitHub Actions (`.github/workflows/build.yml`) runs on every push:
+
+1. Typecheck and tests on Linux.
+2. **Windows** installer (`Glimmr-<version>-Windows-Setup.exe`, x64 and ARM in one installer) built on Windows.
+3. **macOS** disk images for Apple Silicon and Intel (`Glimmr-<version>-macOS-arm64.dmg` / `-x64.dmg`) built on macOS.
+
+Branch builds attach the installers to the workflow run (Actions tab → run → Artifacts).
+
+To build locally on the matching OS: `npm run dist:win` or `npm run dist:mac`.
+
+### Publishing an update
+
+Installed copies of Glimmr check this repository's **GitHub Releases** shortly after they start and every 4 hours.
+They download new versions in the background and offer **Restart to Update** in the sidebar and in
+Settings → Updates.
+
+To publish a version:
 
 ```bash
-npm run dist:win   # Windows NSIS installer (x64 + arm64) in dist/
-npm run dist:mac   # macOS DMGs (arm64 + x64) in dist/ — sign and notarize for distribution
+npm version 1.1.0          # bumps package.json and creates the tag v1.1.0
+git push --follow-tags     # CI builds both platforms and publishes the release
 ```
+
+CI creates a draft release, uploads the Windows and macOS installers plus the update manifests (`latest.yml`,
+`latest-mac.yml`), and publishes the release only after both platforms succeed. Installed apps never see a
+half-finished release. A tag that doesn't match `package.json` fails the build.
+
+### Code signing
+
+Builds work without certificates, with these limits:
+
+- **Windows:** unsigned installers show a SmartScreen warning the first time. Updates install normally.
+- **macOS:** builds are ad-hoc signed. People open the first install with right-click → Open. macOS only lets an app
+  replace itself when it's signed with an Apple Developer ID, so unsigned builds show **Get the New Version**,
+  which opens the release page, instead of updating in place.
+
+For silent updates on macOS and no warnings, add these repository secrets (Settings → Secrets and variables →
+Actions): `MAC_CSC_LINK` (base64 Developer ID Application .p12), `MAC_CSC_KEY_PASSWORD`, `APPLE_ID`,
+`APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`. For Windows, add `WIN_CSC_LINK` and `WIN_CSC_KEY_PASSWORD`.
+CI picks them up automatically, and macOS builds are then notarized too.
 
 Set `GLIMMR_USER_DATA=/some/folder` to keep the catalog somewhere other than the default app-data folder (for
 portable use or testing).

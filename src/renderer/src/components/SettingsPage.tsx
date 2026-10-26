@@ -24,6 +24,7 @@ const SECTIONS = [
   { key: 'editors', label: 'Editors' },
   { key: 'backup', label: 'Backup' },
   { key: 'appearance', label: 'Appearance' },
+  { key: 'updates', label: 'Updates' },
   { key: 'help', label: 'Search help' }
 ]
 
@@ -512,6 +513,55 @@ function AppearanceSection() {
   )
 }
 
+function UpdatesSection() {
+  const s = useStore()
+  const u = s.update
+  const status: Record<string, string> = {
+    idle: 'Glimmr checks for updates shortly after it starts and every few hours.',
+    dev: 'This is a development build. Installed builds check GitHub for updates.',
+    checking: 'Checking for updates…',
+    none: `You’re on the latest version${u?.checkedAt ? ` (checked ${fmtDate(u.checkedAt, { timeStyle: 'short' })})` : ''}.`,
+    available: `Version ${u?.version} is available.`,
+    downloading: `Downloading version ${u?.version}… ${u?.percent ?? 0}%`,
+    ready: `Version ${u?.version} is downloaded and installs when you restart.`,
+    manual: `Version ${u?.version} is available. ${u?.message ?? ''}`,
+    error: `The update check didn’t work: ${u?.message ?? 'unknown error'}. Check your connection and try again.`
+  }
+  return (
+    <Page title="Updates" intro="New versions are published as GitHub releases. Glimmr downloads them in the background and installs them when you restart.">
+      <div>
+        <Setting label={`Glimmr ${u?.currentVersion ?? ''}`} description={status[u?.state ?? 'idle']}>
+          {u?.state === 'ready' ? (
+            <Button size="sm" onClick={() => api.installUpdate()}>
+              Restart to Update
+            </Button>
+          ) : u?.state === 'available' ? (
+            <Button size="sm" onClick={() => api.downloadUpdate()}>
+              Download Update
+            </Button>
+          ) : u?.state === 'manual' ? (
+            <Button size="sm" onClick={() => api.openReleasePage()}>
+              Open Release Page
+            </Button>
+          ) : (
+            <Button variant="outline" size="sm" disabled={u?.state === 'checking' || u?.state === 'downloading'} onClick={() => api.checkForUpdates()}>
+              Check for Updates
+            </Button>
+          )}
+        </Setting>
+        <Setting label="Download updates automatically" description="When off, Glimmr tells you about a new version and waits for you to download it." htmlFor="auto-update">
+          <Switch id="auto-update" checked={s.settings!.autoUpdate} onCheckedChange={(v) => s.setSettings({ autoUpdate: v })} />
+        </Setting>
+        <Setting label="Release notes" description="See what changed in each version.">
+          <Button variant="outline" size="sm" onClick={() => api.openReleasePage()}>
+            View Releases
+          </Button>
+        </Setting>
+      </div>
+    </Page>
+  )
+}
+
 const HELP: [string, string][] = [
   ['sunset beach', 'Words match file and folder names, keywords, titles, captions, cameras, lenses, albums and every text metadata value. Partial words work: lisb finds Lisbon.'],
   ['"golden hour"', 'An exact phrase.'],
@@ -577,7 +627,7 @@ function HelpSection() {
 export function SettingsPage() {
   const s = useStore()
   if (!s.settings) return null
-  const Section = { library: LibrarySection, editors: EditorsSection, backup: BackupSection, appearance: AppearanceSection, help: HelpSection }[s.settingsSection] ?? LibrarySection
+  const Section = { library: LibrarySection, editors: EditorsSection, backup: BackupSection, appearance: AppearanceSection, updates: UpdatesSection, help: HelpSection }[s.settingsSection] ?? LibrarySection
   return (
     <div className="flex h-full">
       <nav aria-label="Settings" className="flex w-52 shrink-0 flex-col gap-px border-r bg-panel p-3">

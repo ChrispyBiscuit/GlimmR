@@ -99,6 +99,7 @@ app.whenReady().then(() => {
     void ctx.scan().then(() => ctx.backupIfDue())
   }, 1500)
   setInterval(() => void ctx.backupIfDue(), 60 * 60 * 1000)
+  ctx.updater.start()
 })
 
 app.on('second-instance', () => {

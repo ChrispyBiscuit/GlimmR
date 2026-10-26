@@ -168,8 +168,21 @@ export interface BackupSettings {
   lastBackupAt: number | null
 }
 
+export interface UpdateStatus {
+  /** manual: an update exists but can't be installed in place (e.g. an unsigned macOS build); download it from the release page. */
+  state: 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'none' | 'error' | 'manual' | 'dev'
+  currentVersion: string
+  version?: string
+  percent?: number
+  message?: string
+  releaseUrl?: string
+  checkedAt?: number
+}
+
 export interface AppSettings {
   theme: 'dark' | 'light' | 'system'
+  /** Download updates in the background as soon as they're published. */
+  autoUpdate: boolean
   thumbSize: number
   autoAdvance: boolean
   editors: EditorSettings

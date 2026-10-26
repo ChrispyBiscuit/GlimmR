@@ -19,7 +19,8 @@ import type {
   SearchRequest,
   SearchResult,
   SmartAlbum,
-  Suggestion
+  Suggestion,
+  UpdateStatus
 } from './types'
 
 export interface Api {
@@ -86,6 +87,11 @@ export interface Api {
   chooseFolder(title: string): Promise<string | null>
   restore(plan: RestorePlan): Promise<void>
   appVersion(): string
+  updateStatus(): UpdateStatus
+  checkForUpdates(): void
+  downloadUpdate(): void
+  installUpdate(): void
+  openReleasePage(): void
   /** Relative URL of a provided Akira Expanded font file, if one was added to the app. */
   brandFont(): string | null
   platform(): string
@@ -97,6 +103,7 @@ export interface Bridge {
   call<M extends ApiMethod>(method: M, ...args: Parameters<Api[M]>): Promise<Awaited<ReturnType<Api[M]>>>
   onJob(cb: (p: JobProgress) => void): () => void
   onLibraryChanged(cb: () => void): () => void
+  onUpdate(cb: (s: UpdateStatus) => void): () => void
   /** Absolute path of a file or folder dropped onto the window. */
   pathForFile(file: File): string
 }
