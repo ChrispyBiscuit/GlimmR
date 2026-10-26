@@ -1,0 +1,26 @@
+appId: app.glimmr.desktop
+productName: GlimmR
+directories:
+  output: dist
+  buildResources: build
+files:
+  - out/**
+  - package.json
+# sharp ships native libvips binaries that must stay outside the asar archive.
+asarUnpack:
+  - node_modules/sharp/**
+  - node_modules/@img/**
+win:
+  target:
+    - target: nsis
+      arch: [x64, arm64]
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+mac:
+  category: public.app-category.photography
+  target:
+    # Separate builds per architecture: sharp's native binaries differ between them.
+    - target: dmg
+      arch: [arm64, x64]
+  hardenedRuntime: true
