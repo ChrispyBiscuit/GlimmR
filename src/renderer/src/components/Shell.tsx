@@ -49,7 +49,7 @@ export function Shell() {
       <Sidebar onAddFolder={() => void addFolder()} />
       <main className="flex min-h-0 min-w-0 flex-col bg-canvas">
         {s.view !== 'settings' && (
-          <header className={cn('app-drag flex h-14 shrink-0 items-center gap-2 border-b bg-panel px-4', mac && 'pt-1')}>
+          <header className={cn('app-drag titlebar-inset flex h-12 shrink-0 items-center gap-2 border-b bg-panel pl-4', mac && 'h-16 pt-2')}>
             <SearchBar />
             <Tooltip>
               <TooltipTrigger asChild>

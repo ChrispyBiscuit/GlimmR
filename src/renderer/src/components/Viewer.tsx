@@ -195,7 +195,7 @@ export function Viewer() {
       onMouseMove={wake}
     >
       <div className="relative flex min-w-0 flex-1 flex-col">
-        <header className={cn('absolute inset-x-0 top-0 z-10 flex h-14 items-center gap-2 bg-gradient-to-b from-black/70 to-transparent px-3', chrome)}>
+        <header className={cn('app-drag titlebar-inset absolute inset-x-0 top-0 z-10 flex h-12 items-center gap-2 bg-panel/95 pl-3', mac && 'pl-20', chrome)}>
           <Button variant="ghost" size="sm" onClick={close}>
             <ArrowLeft data-icon="inline-start" />
             Photos
@@ -356,7 +356,7 @@ export function Viewer() {
       </div>
 
       {showInfo && !v.slideshow && detail && (
-        <aside aria-label="Photo info" className="scroll-thin w-[340px] shrink-0 overflow-y-auto border-l border-white/10 bg-panel px-5 py-5">
+        <aside aria-label="Photo info" className={cn('scroll-thin w-[340px] shrink-0 overflow-y-auto border-l border-white/10 bg-panel px-5 py-5', !mac && 'pt-16')}>
           <h2 className="display text-[19px] leading-tight text-pretty">{fmtDate(detail.takenAt, { dateStyle: 'long' })}</h2>
           <p className="tnum mt-1 text-[13px] text-ink-muted">{fmtDate(detail.takenAt, { weekday: 'long', hour: 'numeric', minute: '2-digit' })}</p>
           {exposureParts(detail).length > 0 && (

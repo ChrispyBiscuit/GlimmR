@@ -6,6 +6,7 @@ import { StoreProvider, useStore } from './store'
 import { DialogHost } from './dialogs'
 import { Shell } from './components/Shell'
 import { loadBrandFont } from './fonts'
+import { api } from './api'
 import './styles.css'
 
 void loadBrandFont()
@@ -23,13 +24,18 @@ function useSystemDark(): boolean {
 
 /** Applies the saved theme to <html> so the semantic tokens switch together. */
 function Theme() {
-  const { settings } = useStore()
+  const { settings, viewer } = useStore()
   const systemDark = useSystemDark()
   const pref = settings?.theme ?? 'dark'
   const dark = pref === 'system' ? systemDark : pref === 'dark'
   useEffect(() => {
     document.documentElement.classList.toggle('dark', dark)
   }, [dark])
+  // The native window buttons (Windows/Linux) follow the theme; the photo viewer is always dark.
+  const titleBar = dark || viewer ? 'dark' : 'light'
+  useEffect(() => {
+    void api.setTitleBarTheme(titleBar)
+  }, [titleBar])
   return <Toaster theme={dark ? 'dark' : 'light'} position="bottom-right" />
 }
 

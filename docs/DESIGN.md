@@ -104,6 +104,10 @@ argued with Akira's geometry.
 - **Rediscover** is laid out like a photo book: for each year, one large photo next to a cluster of smaller ones,
   dated in expanded Archivo. Library stats are a single sentence, not tiles.
 
+- **Window chrome** is the app's own top bar (48 px, panel colour). On Windows and Linux the native minimize,
+  maximize and close buttons stay as an overlay, recoloured to the theme and to the always-dark viewer, so
+  Snap Layouts and accessibility keep working. On macOS the traffic lights sit inset in the sidebar.
+
 Text is left-aligned throughout. Numbers use tabular figures.
 
 ## Principles

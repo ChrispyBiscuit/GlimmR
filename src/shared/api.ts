@@ -95,6 +95,8 @@ export interface Api {
   /** Relative URL of a provided Akira Expanded font file, if one was added to the app. */
   brandFont(): string | null
   platform(): string
+  /** Recolours the native window buttons (Windows/Linux) to match the app's top bar. */
+  setTitleBarTheme(theme: 'dark' | 'light'): void
 }
 
 export type ApiMethod = keyof Api

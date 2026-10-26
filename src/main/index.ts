@@ -7,6 +7,7 @@ import { getPhotos } from './db'
 import { BROWSER_EXTS } from './metadata'
 import { generatePreviews, previewPaths } from './previews'
 import type { Api } from '../shared/api'
+import { TITLE_BAR } from './titlebar'
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'glimmr', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }])
 
@@ -58,8 +59,11 @@ function createWindow(): void {
     minHeight: 600,
     show: false,
     title: 'Glimmr',
-    backgroundColor: '#0d0f12',
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    backgroundColor: TITLE_BAR.dark.color,
+    // The app draws its own top bar. macOS keeps its traffic lights inset; Windows and Linux keep their
+    // native window buttons as an overlay (so Snap Layouts still work), recoloured to match the theme.
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
+    ...(process.platform === 'darwin' ? {} : { titleBarOverlay: { ...TITLE_BAR.dark, height: TITLE_BAR.height } }),
     autoHideMenuBar: process.platform !== 'darwin',
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),

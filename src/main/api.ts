@@ -12,6 +12,7 @@ import { createBackup, listBackups, mirroredRootPath, readBackup, restoreCatalog
 import type { Api } from '../shared/api'
 import type { Editor, JobProgress } from '../shared/types'
 import { Updater } from './updater'
+import { TITLE_BAR } from './titlebar'
 
 export class AppContext {
   library: Library
@@ -303,6 +304,10 @@ export function createApi(ctx: AppContext): Api {
       const file = ['akira-expanded.woff2', 'akira-expanded.otf', 'akira-expanded.ttf'].find((f) => fs.existsSync(path.join(dir, f)))
       return file ? `fonts/${file}` : null
     },
-    platform: () => process.platform
+    platform: () => process.platform,
+    setTitleBarTheme: (theme) => {
+      if (process.platform === 'darwin' || !ctx.window || ctx.window.isDestroyed()) return
+      ctx.window.setTitleBarOverlay({ ...TITLE_BAR[theme], height: TITLE_BAR.height })
+    }
   }
 }

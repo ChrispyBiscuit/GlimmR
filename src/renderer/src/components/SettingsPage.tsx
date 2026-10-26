@@ -629,26 +629,31 @@ export function SettingsPage() {
   if (!s.settings) return null
   const Section = { library: LibrarySection, editors: EditorsSection, backup: BackupSection, appearance: AppearanceSection, updates: UpdatesSection, help: HelpSection }[s.settingsSection] ?? LibrarySection
   return (
-    <div className="flex h-full">
-      <nav aria-label="Settings" className="flex w-52 shrink-0 flex-col gap-px border-r bg-panel p-3">
-        <Button variant="ghost" size="sm" className="mb-3 justify-start" onClick={s.closeSettings}>
+    <div className="flex h-full flex-col">
+      <header className={cn('app-drag titlebar-inset flex h-12 shrink-0 items-center gap-3 border-b bg-panel pl-3', mac && 'h-16 pt-2')}>
+        <Button variant="ghost" size="sm" onClick={s.closeSettings}>
           <ArrowLeft data-icon="inline-start" />
           Back
         </Button>
-        {SECTIONS.map((sec) => (
-          <button
-            key={sec.key}
-            type="button"
-            aria-current={s.settingsSection === sec.key ? 'page' : undefined}
-            onClick={() => s.openSettings(sec.key)}
-            className={cn('h-8 rounded-md px-2.5 text-left text-[13px] text-ink-muted hover:bg-accent hover:text-ink', s.settingsSection === sec.key && 'bg-accent font-medium text-ink')}
-          >
-            {sec.label}
-          </button>
-        ))}
-      </nav>
-      <div className="scroll-thin min-w-0 flex-1 overflow-y-auto bg-panel px-12 py-10">
-        <Section />
+        <span className="text-[13px] font-medium">Settings</span>
+      </header>
+      <div className="flex min-h-0 flex-1">
+        <nav aria-label="Settings sections" className="flex w-52 shrink-0 flex-col gap-px border-r bg-panel p-3">
+          {SECTIONS.map((sec) => (
+            <button
+              key={sec.key}
+              type="button"
+              aria-current={s.settingsSection === sec.key ? 'page' : undefined}
+              onClick={() => s.openSettings(sec.key)}
+              className={cn('h-8 rounded-md px-2.5 text-left text-[13px] text-ink-muted hover:bg-accent hover:text-ink', s.settingsSection === sec.key && 'bg-accent font-medium text-ink')}
+            >
+              {sec.label}
+            </button>
+          ))}
+        </nav>
+        <div className="scroll-thin min-w-0 flex-1 overflow-y-auto bg-panel px-12 py-10">
+          <Section />
+        </div>
       </div>
     </div>
   )
