@@ -286,31 +286,35 @@ export class Library {
   // ---- keywords ----
 
   keywordTree(): KeywordNode[] {
-    const rows = this.db.prepare('SELECT pk.photo_id, k.id, k.path FROM photo_keywords pk JOIN keywords k ON k.id = pk.keyword_id').all() as {
-      photo_id: number
-      id: number
-      path: string
-    }[]
-    const ids = new Map((this.db.prepare('SELECT id, path FROM keywords').all() as { id: number; path: string }[]).map((k) => [k.path.toLowerCase(), k.id]))
-    // Count distinct photos per node, including photos tagged with descendants.
-    const photosPer = new Map<string, Set<number>>()
+    // Direct counts per stored keyword path; cheap with the photo_keywords index.
+    const rows = this.db
+      .prepare('SELECT k.id, k.path, COUNT(pk.photo_id) AS c FROM keywords k JOIN photo_keywords pk ON pk.keyword_id = k.id GROUP BY k.id')
+      .all() as { id: number; path: string; c: number }[]
+    const ids = new Map(rows.map((r) => [r.path.toLowerCase(), r.id]))
     const display = new Map<string, string>()
+    const counts = new Map<string, number>(rows.map((r) => [r.path.toLowerCase(), r.c]))
+    const parents = new Set<string>()
     for (const r of rows) {
       const parts = r.path.split('>')
       for (let i = 1; i <= parts.length; i++) {
         const p = parts.slice(0, i).join('>')
-        const key = p.toLowerCase()
-        if (!display.has(key)) display.set(key, p)
-        let set = photosPer.get(key)
-        if (!set) photosPer.set(key, (set = new Set()))
-        set.add(r.photo_id)
+        if (!display.has(p.toLowerCase())) display.set(p.toLowerCase(), p)
+        if (i < parts.length) parents.add(p.toLowerCase())
       }
+    }
+    // Nodes with children count distinct photos tagged with the node or anything below it.
+    const subtree = this.db.prepare(
+      "SELECT COUNT(DISTINCT pk.photo_id) AS c FROM keywords k JOIN photo_keywords pk ON pk.keyword_id = k.id WHERE k.path = ? OR k.path LIKE ? ESCAPE '\\'"
+    )
+    for (const key of parents) {
+      const p = display.get(key)!
+      counts.set(key, (subtree.get(p, p.replace(/[\\%_]/g, (c) => '\\' + c) + '>%') as { c: number }).c)
     }
     const nodes = new Map<string, KeywordNode>()
     const roots: KeywordNode[] = []
-    for (const key of [...photosPer.keys()].sort()) {
+    for (const key of [...display.keys()].sort()) {
       const p = display.get(key)!
-      const node: KeywordNode = { id: ids.get(key) ?? 0, name: p.split('>').pop()!, path: p, count: photosPer.get(key)!.size, children: [] }
+      const node: KeywordNode = { id: ids.get(key) ?? 0, name: p.split('>').pop()!, path: p, count: counts.get(key) ?? 0, children: [] }
       nodes.set(key, node)
       const parent = key.includes('>') ? nodes.get(key.slice(0, key.lastIndexOf('>'))) : undefined
       if (parent) parent.children.push(node)

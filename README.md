@@ -96,7 +96,32 @@ Electron main (Node)                                    Renderer (React + Ant De
 | `Z` / `Space` / click | Zoom to 100% (viewer) |
 | `Ctrl/⌘ A`, `Esc` | Select all, clear / back |
 
+## Performance
+
+Measured on a synthetic catalog of 100,000 photos (15 metadata fields and 2 keywords each) in this
+project's Linux container, query time only:
+
+| Query | Time |
+|---|---|
+| All photos, newest first | 115 ms |
+| Free text (`beach`, prefix `moun`) | 32–48 ms |
+| `keyword:=dog`, `date:2010..2012 rating:>=3` | 35–47 ms |
+| Sort by a raw metadata key | 134 ms |
+| `ShutterCount:>150000` / `ExposureProgram:Manual` | 110 / 233 ms |
+| `camera:"EOS R5" iso:>1600` (substring match over all rows) | 305 ms |
+| Exclusions matching 77% of the library | 466 ms |
+| Facet panel (computed after results, in the background) | ~600 ms |
+
+Most searches meet the PRD's 150 ms target. Substring matches on camera and broad exclusions don't yet.
+
 ## Status
 
-v1.0 MVP: all P0 requirements in the [PRD](docs/PRD.md) are implemented. Planned next (P1): folder watching,
-RAW+JPEG stacking, map view, color search, compare view and automatic XMP writing.
+v1.0 MVP: the PRD's P0 requirements are implemented, with these gaps:
+
+- Dragging photos onto an album (ORG-1) isn't built yet. Use the selection bar, the context menu or "+" in
+  the sidebar instead.
+- The info panel shows a summary plus a filterable list of all fields, not the grouped sections META-7 describes.
+- Performance targets are met for most queries; see the table above.
+
+Planned next (P1): folder watching, RAW+JPEG stacking, map view, color search, compare view and automatic XMP
+writing.
