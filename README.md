@@ -84,8 +84,8 @@ npm version 1.1.0          # bumps package.json and creates the tag v1.1.0
 git push --follow-tags     # CI builds both platforms and publishes the release
 ```
 
-Or, without a tag: set the version in `package.json`, push, then in GitHub open **Actions → Build → Run workflow**,
-tick **release** and run it. CI tags `v<version>` itself.
+Or, without pushing a tag: set the version in `package.json` and push a commit whose message contains `[release]`.
+You can also open **Actions → Build → Run workflow** and tick **release**. Either way, CI tags `v<version>` itself.
 
 Either way, CI creates a draft release, uploads the Windows and macOS installers plus the update manifests (`latest.yml`,
 `latest-mac.yml`), and publishes the release only after both platforms succeed. Installed apps never see a
