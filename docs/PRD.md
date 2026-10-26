@@ -4,7 +4,7 @@
 |---|---|
 | Product | GlimmR, a desktop photo library for Windows and macOS |
 | Status | v1.0 (MVP) scope defined; P0 items are built in this repository |
-| Front end | React + **Ant Design** in Electron |
+| Front end | React + shadcn/ui (Radix) + Tailwind CSS v4 in Electron. The first build used Ant Design; see [DESIGN.md](DESIGN.md) |
 | Research | [RESEARCH.md](RESEARCH.md) |
 
 ## 1. Summary

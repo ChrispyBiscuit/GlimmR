@@ -1,9 +1,14 @@
 import { StrictMode, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { App as AntApp, ConfigProvider, theme } from 'antd'
+import { Toaster } from '@/components/ui/sonner'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { StoreProvider, useStore } from './store'
+import { DialogHost } from './dialogs'
 import { Shell } from './components/Shell'
+import { loadBrandFont } from './fonts'
 import './styles.css'
+
+void loadBrandFont()
 
 function useSystemDark(): boolean {
   const [dark, setDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
@@ -16,54 +21,28 @@ function useSystemDark(): boolean {
   return dark
 }
 
-/** Theme follows the saved setting; the store lives inside AntApp so it can use message/notification. */
-function Themed() {
+/** Applies the saved theme to <html> so the semantic tokens switch together. */
+function Theme() {
+  const { settings } = useStore()
   const systemDark = useSystemDark()
-  const [pref, setPref] = useState<'dark' | 'light' | 'system'>('dark')
+  const pref = settings?.theme ?? 'dark'
   const dark = pref === 'system' ? systemDark : pref === 'dark'
   useEffect(() => {
-    document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+    document.documentElement.classList.toggle('dark', dark)
   }, [dark])
-  return (
-    <ConfigProvider
-      theme={{
-        algorithm: dark ? theme.darkAlgorithm : theme.defaultAlgorithm,
-        token: {
-          colorPrimary: '#f5b83d',
-          colorInfo: '#f5b83d',
-          borderRadius: 8,
-          fontFamily: "Inter, 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif",
-          colorBgBase: dark ? '#0d0f12' : '#ffffff',
-          colorBgContainer: dark ? '#15181d' : '#ffffff',
-          colorBgElevated: dark ? '#1c2027' : '#ffffff'
-        },
-        components: {
-          Layout: { siderBg: dark ? '#111317' : '#f6f7f9', headerBg: dark ? '#0d0f12' : '#ffffff', bodyBg: dark ? '#0d0f12' : '#ffffff' },
-          Menu: { itemBg: 'transparent', subMenuItemBg: 'transparent' },
-          Tree: { colorBgContainer: 'transparent' }
-        }
-      }}
-    >
-      <AntApp>
-        <StoreProvider>
-          <ThemeSync onTheme={setPref} />
-          <Shell />
-        </StoreProvider>
-      </AntApp>
-    </ConfigProvider>
-  )
+  return <Toaster theme={dark ? 'dark' : 'light'} position="bottom-right" />
 }
 
-function ThemeSync({ onTheme }: { onTheme: (t: 'dark' | 'light' | 'system') => void }) {
-  const { settings } = useStore()
-  useEffect(() => {
-    if (settings) onTheme(settings.theme)
-  }, [settings, onTheme])
-  return null
-}
+document.documentElement.classList.add('dark')
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <Themed />
+    <TooltipProvider delayDuration={400}>
+      <StoreProvider>
+        <Theme />
+        <DialogHost />
+        <Shell />
+      </StoreProvider>
+    </TooltipProvider>
   </StrictMode>
 )

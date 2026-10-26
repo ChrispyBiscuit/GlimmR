@@ -1,5 +1,5 @@
 appId: app.glimmr.desktop
-productName: GlimmR
+productName: Glimmr
 directories:
   output: dist
   buildResources: build

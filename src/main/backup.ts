@@ -9,7 +9,7 @@ import type { Db } from './db'
 import type { BackupEntry, BackupManifest } from '../shared/types'
 
 export const BACKUP_SUFFIX = '.glimmr-backup'
-export const ORIGINALS_DIR = 'GlimmR Originals'
+export const ORIGINALS_DIR = 'Glimmr Originals'
 
 export async function sha256(file: string): Promise<string> {
   const hash = crypto.createHash('sha256')
@@ -54,7 +54,7 @@ export async function createBackup(db: Db, opts: BackupOptions): Promise<BackupE
   const check = db.prepare('PRAGMA integrity_check').get() as Record<string, string>
   if (Object.values(check)[0] !== 'ok') throw new Error('The catalog failed its integrity check; backup stopped so a damaged copy is not saved.')
 
-  const dir = path.join(opts.destination, `GlimmR ${stamp()}${BACKUP_SUFFIX}`)
+  const dir = path.join(opts.destination, `Glimmr ${stamp()}${BACKUP_SUFFIX}`)
   const tmp = `${dir}.partial`
   await fs.promises.rm(tmp, { recursive: true, force: true })
   await fs.promises.mkdir(tmp, { recursive: true })
@@ -89,7 +89,7 @@ export async function createBackup(db: Db, opts: BackupOptions): Promise<BackupE
 }
 
 /**
- * Copies every cataloged original (and its XMP sidecar) into `<destination>/GlimmR Originals/<root>/…`.
+ * Copies every cataloged original (and its XMP sidecar) into `<destination>/Glimmr Originals/<root>/…`.
  * Files already present with the same size and mtime are skipped; copies are verified by size and checksum.
  */
 async function mirrorOriginals(

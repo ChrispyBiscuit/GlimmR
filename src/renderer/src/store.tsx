@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { App as AntApp } from 'antd'
+import { toast } from 'sonner'
 import { api, bridge } from './api'
 import type {
   Album,
@@ -15,7 +15,7 @@ import type {
   SortSpec
 } from '../../shared/types'
 
-export type View = 'rediscover' | 'browse'
+export type View = 'rediscover' | 'browse' | 'settings'
 
 export interface ViewerState {
   ids: number[]
@@ -24,7 +24,6 @@ export interface ViewerState {
 }
 
 function useStoreValue() {
-  const { message } = AntApp.useApp()
   const [settings, setSettingsState] = useState<AppSettings | null>(null)
   const [view, setView] = useState<View>('rediscover')
   const [scope, setScopeState] = useState<Scope>({ type: 'all' })
@@ -32,6 +31,8 @@ function useStoreValue() {
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<SortSpec>({ field: 'default', dir: 'desc' })
   const [ids, setIds] = useState<number[]>([])
+  const [aspects, setAspects] = useState<number[]>([])
+  const [days, setDays] = useState<(string | null)[]>([])
   const [total, setTotal] = useState(0)
   const [searchError, setSearchError] = useState<string | undefined>()
   const [tookMs, setTookMs] = useState(0)
@@ -50,8 +51,8 @@ function useStoreValue() {
   const [libraryVersion, setLibraryVersion] = useState(0)
   // Bumped on catalog edits: refreshes facet counts without re-running (and re-sorting) the search.
   const [editVersion, setEditVersion] = useState(0)
-  const [settingsOpen, setSettingsOpen] = useState<string | null>(null)
-  const [filtersOpen, setFiltersOpen] = useState(true)
+  const [settingsSection, setSettingsSection] = useState('library')
+  const [previousView, setPreviousView] = useState<View>('rediscover')
 
   const putPhotos = useCallback((list: Photo[]) => {
     for (const p of list) cache.current.set(p.id, p)
@@ -79,8 +80,8 @@ function useStoreValue() {
       if (p.finished) {
         // Jobs can change settings in the main process (e.g. last backup time).
         void api.getSettings().then(setSettingsState)
-        if (p.error) message.error(`${p.label}: ${p.error}`, 6)
-        else if (p.kind !== 'scan' || (p.message && !p.message.startsWith('0 new, 0 updated'))) message.success(`${p.label}: ${p.message ?? 'done'}`)
+        if (p.error) toast.error(p.label, { description: p.error, duration: 8000 })
+        else if (p.kind !== 'scan' || (p.message && !p.message.startsWith('0 new, 0 updated'))) toast.success(p.label, { description: p.message })
       }
     })
     // Throttle library refreshes while a scan streams in.
@@ -97,7 +98,7 @@ function useStoreValue() {
       offJob()
       offLib()
     }
-  }, [refreshSidebar, message])
+  }, [refreshSidebar])
 
   // While scanning, refresh results every few seconds so new photos appear.
   const scanning = Object.values(jobs).some((j) => j.kind === 'scan' && j.total > 0)
@@ -121,6 +122,8 @@ function useStoreValue() {
       if (seq !== searchSeq.current) return
       putPhotos(r.photos)
       setIds(r.ids)
+      setAspects(r.aspects)
+      setDays(r.days)
       setTotal(r.total)
       setSearchError(r.error)
       setTookMs(r.tookMs)
@@ -162,6 +165,18 @@ function useStoreValue() {
     setView('browse')
   }, [])
 
+  const openSettings = useCallback(
+    (section = 'library') => {
+      setSettingsSection(section)
+      setView((v) => {
+        if (v !== 'settings') setPreviousView(v)
+        return 'settings'
+      })
+    },
+    []
+  )
+  const closeSettings = useCallback(() => setView(previousView), [previousView])
+
   const search = useCallback((q: string) => {
     setQuery(q)
     setView('browse')
@@ -188,10 +203,10 @@ function useStoreValue() {
     async (targetIds: number[], editorId?: string) => {
       if (!targetIds.length) return
       const r = await api.openInEditor(targetIds, editorId)
-      if (!r.ok) message.warning(r.message ?? 'Could not open the editor')
-      else message.info(`Opening ${targetIds.length === 1 ? 'photo' : `${targetIds.length} photos`}…`, 1.5)
+      if (!r.ok) toast.warning(r.message ?? 'The editor could not be opened.')
+      else toast(`Opening ${targetIds.length === 1 ? '1 photo' : `${targetIds.length} photos`} in your editor…`, { duration: 1800 })
     },
-    [message]
+    []
   )
 
   /** Selected ids, or the focused photo when nothing is selected. */
@@ -213,6 +228,8 @@ function useStoreValue() {
     setSort,
     navigate,
     ids,
+    aspects,
+    days,
     total,
     searchError,
     tookMs,
@@ -240,10 +257,9 @@ function useStoreValue() {
     refreshResults,
     updatePhotos,
     openEditor,
-    settingsOpen,
-    setSettingsOpen,
-    filtersOpen,
-    setFiltersOpen
+    settingsSection,
+    openSettings,
+    closeSettings
   }
 }
 

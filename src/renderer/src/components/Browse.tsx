@@ -1,144 +1,119 @@
 import { useEffect, useState } from 'react'
-import { App, Button, Input, Segmented, Select, Slider, Tag, Tooltip, Typography } from 'antd'
-import { FilterOutlined, SortAscendingOutlined, SortDescendingOutlined, SaveOutlined, ExpandOutlined, CompressOutlined } from '@ant-design/icons'
+import { ArrowDownWideNarrow, ArrowUpNarrowWide, Bookmark, Check } from 'lucide-react'
+import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { Input } from '@/components/ui/input'
+import { Slider } from '@/components/ui/slider'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useStore } from '../store'
 import { api } from '../api'
+import { promptDialog } from '../dialogs'
 import { fmtNum } from '../format'
-import { tokenize } from '../../../shared/tokenize'
-import { Filters } from './Filters'
+import { FilterBar } from './FilterBar'
 import { PhotoGrid } from './PhotoGrid'
 import { SelectionBar } from './SelectionBar'
 
 export function Browse() {
   const s = useStore()
-  const { modal, message } = App.useApp()
   const [sortFields, setSortFields] = useState<{ value: string; label: string }[]>([])
-  const [fit, setFit] = useState<'cover' | 'contain'>('cover')
+  const [customSort, setCustomSort] = useState('')
   useEffect(() => void api.sortFields().then(setSortFields), [])
 
-  const tokens = tokenize(s.query)
-  const removeToken = (i: number): void => s.setQuery(tokens.filter((_, j) => j !== i).join(' '))
-
-  const sortOptions = [
+  const options = [
     ...(s.scope.type === 'album' ? [{ value: 'albumOrder', label: 'Album order' }] : []),
     { value: 'default', label: s.scope.type === 'smart' ? 'Smart album order' : 'Date taken' },
-    ...sortFields.filter((f) => f.value !== 'taken'),
-    ...(sortFields.some((f) => f.value === s.sort.field) || ['default', 'albumOrder'].includes(s.sort.field) ? [] : [{ value: s.sort.field, label: s.sort.field }])
+    ...sortFields.filter((f) => f.value !== 'taken')
   ]
+  const sortLabel = options.find((o) => o.value === s.sort.field)?.label ?? s.sort.field
 
-  const saveSmart = (): void => {
-    let name = s.query
-    modal.confirm({
-      title: 'Save as smart album',
-      icon: null,
-      content: (
-        <div>
-          <Input autoFocus defaultValue={name} onChange={(e) => (name = e.target.value)} />
-          <Typography.Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0 }}>
-            Updates automatically as photos match <code>{s.query}</code>.
-          </Typography.Paragraph>
-        </div>
-      ),
-      onOk: async () => {
-        const id = await api.saveSmartAlbum({ name: name.trim() || s.query, query: s.query, sort: s.sort.field === 'default' ? { field: 'taken', dir: 'desc' } : s.sort })
-        await s.refreshSidebar()
-        s.navigate({ type: 'smart', id }, name.trim() || s.query)
-        message.success('Smart album saved')
-      }
+  const saveSearch = async (): Promise<void> => {
+    const name = await promptDialog({
+      title: 'Save search as a smart album',
+      description: 'The album keeps itself up to date as photos match.',
+      confirmLabel: 'Save Smart Album',
+      initial: s.query
     })
+    if (!name) return
+    const id = await api.saveSmartAlbum({ name, query: s.query, sort: s.sort.field === 'default' ? { field: 'taken', dir: 'desc' } : s.sort })
+    await s.refreshSidebar()
+    s.navigate({ type: 'smart', id }, name)
+    toast.success('Smart album saved', { description: name })
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div style={{ padding: '6px 20px 10px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <Tooltip title="Filters">
-          <Button type={s.filtersOpen ? 'primary' : 'default'} ghost={s.filtersOpen} icon={<FilterOutlined />} onClick={() => s.setFiltersOpen(!s.filtersOpen)} />
-        </Tooltip>
-        <Typography.Title level={4} style={{ margin: 0 }}>
-          {s.title}
-        </Typography.Title>
-        <Typography.Text type="secondary" className="stat">
-          {fmtNum(s.total)} {s.total === 1 ? 'photo' : 'photos'}
-          {s.query && ` · ${s.tookMs} ms`}
-        </Typography.Text>
-        <div className="chips">
-          {tokens.map((t, i) => (
-            <Tag key={`${t}-${i}`} closable onClose={() => removeToken(i)} color={t.startsWith('-') ? 'red' : 'gold'} style={{ marginInlineEnd: 0 }}>
-              {t}
-            </Tag>
-          ))}
-          {tokens.length > 0 && (
-            <>
-              <Button size="small" type="link" onClick={() => s.setQuery('')}>
-                Clear
+    <div className="flex h-full flex-col">
+      <div className="flex shrink-0 flex-col gap-3 border-b bg-panel px-5 pt-4 pb-3">
+        <div className="flex items-center gap-3">
+          <h1 className="min-w-0 truncate text-lg font-semibold">{s.title}</h1>
+          <span className="tnum text-[13px] text-ink-muted" aria-live="polite">
+            {fmtNum(s.total)} {s.total === 1 ? 'photo' : 'photos'}
+          </span>
+          <div className="flex-1" />
+          {s.query && (
+            <Button variant="ghost" size="sm" onClick={saveSearch}>
+              <Bookmark data-icon="inline-start" />
+              Save Search
+            </Button>
+          )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="font-normal">
+                <span className="text-ink-muted">Sort</span> {sortLabel}
               </Button>
-              <Tooltip title="Save this search as a smart album">
-                <Button size="small" icon={<SaveOutlined />} onClick={saveSmart}>
-                  Save as smart album
-                </Button>
-              </Tooltip>
-            </>
-          )}
-        </div>
-        <div style={{ flex: 1 }} />
-        <Select
-          style={{ width: 170 }}
-          value={s.sort.field}
-          options={sortOptions}
-          showSearch
-          onChange={(field) => s.setSort({ ...s.sort, field })}
-          popupRender={(menu) => (
-            <>
-              {menu}
-              <div style={{ padding: 8, borderTop: '1px solid var(--line)' }}>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>Sort by</DropdownMenuLabel>
+              {options.map((o) => (
+                <DropdownMenuItem key={o.value} onSelect={() => s.setSort({ ...s.sort, field: o.value })}>
+                  <span className="flex-1">{o.label}</span>
+                  {s.sort.field === o.value && <Check />}
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuSeparator />
+              <form
+                className="p-1"
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  if (customSort.trim()) s.setSort({ ...s.sort, field: customSort.trim() })
+                }}
+              >
                 <Input
-                  size="small"
-                  placeholder="Sort by metadata key, e.g. ShutterCount"
-                  onPressEnter={(e) => {
-                    const v = (e.target as HTMLInputElement).value.trim()
-                    if (v) s.setSort({ ...s.sort, field: v })
-                  }}
+                  aria-label="Sort by a metadata field"
+                  placeholder="Any metadata field, e.g. ShutterCount…"
+                  value={customSort}
+                  onChange={(e) => setCustomSort(e.target.value)}
+                  onKeyDown={(e) => e.stopPropagation()}
+                  spellCheck={false}
+                  autoComplete="off"
+                  className="h-7 text-xs"
                 />
-              </div>
-            </>
-          )}
-        />
-        <Tooltip title={s.sort.dir === 'desc' ? 'Descending' : 'Ascending'}>
-          <Button
-            icon={s.sort.dir === 'desc' ? <SortDescendingOutlined /> : <SortAscendingOutlined />}
-            onClick={() => s.setSort({ ...s.sort, dir: s.sort.dir === 'desc' ? 'asc' : 'desc' })}
-          />
-        </Tooltip>
-        <Segmented
-          size="small"
-          value={fit}
-          onChange={(v) => setFit(v as 'cover' | 'contain')}
-          options={[
-            { value: 'cover', icon: <ExpandOutlined />, title: 'Fill tiles' },
-            { value: 'contain', icon: <CompressOutlined />, title: 'Show whole photo' }
-          ]}
-        />
-        <Slider
-          style={{ width: 120 }}
-          min={120}
-          max={480}
-          step={20}
-          value={s.settings?.thumbSize ?? 220}
-          onChange={(v) => s.setSettings({ thumbSize: v })}
-          tooltip={{ formatter: null }}
-        />
-      </div>
-      {s.searchError && (
-        <Typography.Text type="warning" style={{ padding: '0 20px 8px' }}>
-          {s.searchError}
-        </Typography.Text>
-      )}
-      <div style={{ flex: 1, display: 'flex', minHeight: 0, position: 'relative' }}>
-        {s.filtersOpen && <Filters />}
-        <div style={{ flex: 1, minWidth: 0, position: 'relative' }} className={fit === 'contain' ? 'fit-contain' : ''}>
-          <PhotoGrid />
-          <SelectionBar />
+              </form>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={s.sort.dir === 'desc' ? 'Sorted newest or largest first; switch to ascending' : 'Sorted oldest or smallest first; switch to descending'}
+                onClick={() => s.setSort({ ...s.sort, dir: s.sort.dir === 'desc' ? 'asc' : 'desc' })}
+              >
+                {s.sort.dir === 'desc' ? <ArrowDownWideNarrow /> : <ArrowUpNarrowWide />}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{s.sort.dir === 'desc' ? 'Descending' : 'Ascending'}</TooltipContent>
+          </Tooltip>
+          <div className="flex w-28 items-center">
+            <Slider aria-label="Photo size" min={120} max={420} step={20} value={[s.settings?.thumbSize ?? 220]} onValueChange={([v]) => s.setSettings({ thumbSize: v })} />
+          </div>
         </div>
+        <FilterBar />
+        {s.searchError && <p className="text-xs text-reject">{s.searchError}</p>}
+      </div>
+      <div className="relative min-h-0 flex-1">
+        <PhotoGrid />
+        <SelectionBar />
       </div>
     </div>
   )

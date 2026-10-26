@@ -1,146 +1,165 @@
-import { useState } from 'react'
-import { Button, Divider, Dropdown, Popover, Rate, Select, Tooltip, Typography, theme } from 'antd'
-import { BookOutlined, CheckOutlined, CloseOutlined, EditOutlined, FlagOutlined, StopOutlined, TagsOutlined } from '@ant-design/icons'
+import { BookImage, FileDown, Flag, Pencil, Star, Tags, X } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuShortcut, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Separator } from '@/components/ui/separator'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { cn } from '@/lib/utils'
 import { useStore } from '../store'
 import { api } from '../api'
+import { promptDialog } from '../dialogs'
 import { LABEL_COLORS } from '../format'
-import { usePrompt } from '../prompt'
+import { KeywordEditor } from './KeywordEditor'
 import { COLOR_LABELS } from '../../../shared/types'
-import type { KeywordNode } from '../../../shared/types'
 
-const flatten = (nodes: KeywordNode[]): string[] => nodes.flatMap((n) => [n.path, ...flatten(n.children)])
+const mac = navigator.userAgent.includes('Mac')
 
-export function KeywordEditor({ ids, current, onDone, autoFocus }: { ids: number[]; current: string[]; onDone?: () => void; autoFocus?: boolean }) {
-  const s = useStore()
-  const [value, setValue] = useState<string[]>(current)
-  const all = flatten(s.keywords)
+export function StarRating({ value, onChange, size = 'md' }: { value: number; onChange: (v: number) => void; size?: 'sm' | 'md' }) {
   return (
-    <div style={{ width: 320 }}>
-      <Select
-        mode="tags"
-        style={{ width: '100%' }}
-        autoFocus={autoFocus}
-        value={value}
-        tokenSeparators={[',']}
-        placeholder="Add keywords; use > for hierarchy (Places > Portugal)"
-        options={all.map((k) => ({ value: k, label: k.replace(/>/g, ' › ') }))}
-        onChange={async (next: string[]) => {
-          const add = next.filter((k) => !value.includes(k))
-          const remove = value.filter((k) => !next.includes(k))
-          setValue(next)
-          await s.updatePhotos(ids, { addKeywords: add, removeKeywords: remove })
-        }}
-      />
-      <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 6 }}>
-        {ids.length > 1 ? `Applies to ${ids.length} photos. Only keywords added or removed here change.` : 'Stored in the catalog. Use “Write XMP” to share with other apps.'}
-      </Typography.Text>
-      {onDone && (
-        <Button size="small" type="primary" style={{ marginTop: 8 }} onClick={onDone}>
-          Done
-        </Button>
-      )}
+    <div className="flex items-center" role="radiogroup" aria-label="Rating">
+      {[1, 2, 3, 4, 5].map((n) => (
+        <button
+          key={n}
+          type="button"
+          role="radio"
+          aria-checked={value === n}
+          aria-label={`${n} star${n > 1 ? 's' : ''}`}
+          title={`${n} star${n > 1 ? 's' : ''} (${n})`}
+          onClick={() => onChange(value === n ? 0 : n)}
+          className={cn('flex items-center justify-center rounded-sm text-ink-muted/50 hover:text-marker', size === 'sm' ? 'size-6' : 'size-7')}
+        >
+          <Star className={cn(size === 'sm' ? 'size-3.5' : 'size-4', n <= value && 'fill-marker text-marker')} />
+        </button>
+      ))}
     </div>
   )
 }
 
 export function SelectionBar() {
   const s = useStore()
-  const { token } = theme.useToken()
-  const [kwOpen, setKwOpen] = useState(false)
-  const prompt = usePrompt()
   if (s.selected.size === 0) return null
   const ids = s.targets
-  const photos = ids.map((id) => s.cache.get(id)).filter(Boolean)
-  const commonRating = photos.every((p) => p!.rating === photos[0]?.rating) ? (photos[0]?.rating ?? 0) : 0
+  const photos = ids.map((id) => s.cache.get(id)).filter((p) => !!p)
+  const rating = photos.length && photos.every((p) => p.rating === photos[0].rating) ? photos[0].rating : 0
+  const allPicked = photos.length > 0 && photos.every((p) => p.flag === 'pick')
+  const allRejected = photos.length > 0 && photos.every((p) => p.flag === 'reject')
 
   return (
-    <div className="selection-bar" style={{ background: token.colorBgElevated, border: `1px solid ${token.colorBorderSecondary}` }}>
-      <Typography.Text strong style={{ whiteSpace: 'nowrap' }}>
-        {ids.length.toLocaleString()} selected
-      </Typography.Text>
-      <Divider orientation="vertical" />
-      <Rate value={commonRating} onChange={(v) => void s.updatePhotos(ids, { rating: v })} style={{ fontSize: 16 }} />
-      <Tooltip title="Pick (P)">
-        <Button type="text" icon={<FlagOutlined style={{ color: '#7ee787' }} />} onClick={() => void s.updatePhotos(ids, { flag: 'pick' })} />
+    <div
+      role="toolbar"
+      aria-label="Selected photos"
+      className="absolute bottom-5 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1 rounded-lg border bg-raised px-2 py-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.35)]"
+    >
+      <span className="tnum px-2 text-[13px] font-medium whitespace-nowrap">{ids.length.toLocaleString()} selected</span>
+      <Separator orientation="vertical" className="mx-1 h-5" />
+      <StarRating value={rating} onChange={(v) => void s.updatePhotos(ids, { rating: v })} size="sm" />
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button variant="ghost" size="icon-sm" aria-label="Pick" aria-pressed={allPicked} onClick={() => void s.updatePhotos(ids, { flag: allPicked ? null : 'pick' })}>
+            <Flag className={cn(allPicked && 'fill-pick text-pick')} />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Pick (P)</TooltipContent>
       </Tooltip>
-      <Tooltip title="Reject (X)">
-        <Button type="text" icon={<StopOutlined style={{ color: '#ff7875' }} />} onClick={() => void s.updatePhotos(ids, { flag: 'reject' })} />
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button variant="ghost" size="icon-sm" aria-label="Reject" aria-pressed={allRejected} onClick={() => void s.updatePhotos(ids, { flag: allRejected ? null : 'reject' })}>
+            <X className={cn(allRejected && 'text-reject')} />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Reject (X)</TooltipContent>
       </Tooltip>
-      <Tooltip title="Unflag (U)">
-        <Button type="text" icon={<CloseOutlined />} onClick={() => void s.updatePhotos(ids, { flag: null })} />
-      </Tooltip>
-      <Dropdown
-        menu={{
-          items: [
-            ...COLOR_LABELS.map((l, i) => ({
-              key: l,
-              label: (
-                <span>
-                  <span className="label-dot" style={{ background: LABEL_COLORS[l], marginRight: 8 }} />
-                  {l[0].toUpperCase() + l.slice(1)}
-                  {i < 4 && <span className="kbd" style={{ marginLeft: 10 }}>{i + 6}</span>}
-                </span>
-              )
-            })),
-            { key: 'none', label: 'No label' }
-          ],
-          onClick: ({ key }) => void s.updatePhotos(ids, { label: key === 'none' ? null : (key as (typeof COLOR_LABELS)[number]) })
-        }}
-      >
-        <Button type="text">
-          <span className="label-dot" style={{ background: 'conic-gradient(#ff5a5f, #ffc53d, #52c41a, #4096ff, #b37feb, #ff5a5f)' }} />
-        </Button>
-      </Dropdown>
-      <Popover
-        trigger="click"
-        open={kwOpen}
-        onOpenChange={setKwOpen}
-        destroyOnHidden
-        content={<KeywordEditor ids={ids} current={[]} onDone={() => setKwOpen(false)} autoFocus />}
-        title="Add keywords"
-      >
-        <Tooltip title="Keywords">
-          <Button type="text" icon={<TagsOutlined />} />
+      <DropdownMenu>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon-sm" aria-label="Color label">
+                <span className="size-3.5 rounded-full bg-[conic-gradient(#e5534b,#e6b422,#46a758,#3e8ed0,#8e6bd8,#e5534b)]" aria-hidden />
+              </Button>
+            </DropdownMenuTrigger>
+          </TooltipTrigger>
+          <TooltipContent>Color label</TooltipContent>
         </Tooltip>
+        <DropdownMenuContent>
+          {COLOR_LABELS.map((l, i) => (
+            <DropdownMenuItem key={l} onSelect={() => void s.updatePhotos(ids, { label: l })}>
+              <span className="size-2.5 rounded-full" style={{ background: LABEL_COLORS[l] }} aria-hidden />
+              {l[0].toUpperCase() + l.slice(1)}
+              {i < 4 && <DropdownMenuShortcut>{i + 6}</DropdownMenuShortcut>}
+            </DropdownMenuItem>
+          ))}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => void s.updatePhotos(ids, { label: null })}>No Label</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <Separator orientation="vertical" className="mx-1 h-5" />
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button variant="ghost" size="sm">
+            <Tags data-icon="inline-start" />
+            Keywords
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-80" side="top">
+          <p className="mb-2 text-xs text-ink-muted">Added to {ids.length === 1 ? 'this photo' : `all ${ids.length} photos`}.</p>
+          <KeywordEditor ids={ids} current={[]} autoFocus />
+        </PopoverContent>
       </Popover>
-      <Dropdown
-        menu={{
-          items: [
-            ...s.albums.map((a) => ({ key: String(a.id), label: a.name })),
-            ...(s.albums.length ? [{ type: 'divider' as const }] : []),
-            { key: 'new', label: 'New album with selection…' }
-          ],
-          onClick: async ({ key }) => {
-            if (key === 'new') {
-              const name = await prompt('New album')
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="sm">
+            <BookImage data-icon="inline-start" />
+            Add to Album
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent side="top">
+          {s.albums.map((a) => (
+            <DropdownMenuItem
+              key={a.id}
+              onSelect={async () => {
+                await api.addToAlbum(a.id, ids)
+                void s.refreshSidebar()
+              }}
+            >
+              {a.name}
+            </DropdownMenuItem>
+          ))}
+          {s.albums.length > 0 && <DropdownMenuSeparator />}
+          <DropdownMenuItem
+            onSelect={async () => {
+              const name = await promptDialog({ title: 'New album', confirmLabel: 'Create Album', placeholder: 'Summer in Lisbon' })
               if (!name) return
               const id = await api.createAlbum(name, ids)
               await s.refreshSidebar()
               s.navigate({ type: 'album', id }, name)
-            } else {
-              await api.addToAlbum(Number(key), ids)
-              void s.refreshSidebar()
-            }
-          }
-        }}
-      >
-        <Tooltip title="Add to album">
-          <Button type="text" icon={<BookOutlined />} />
-        </Tooltip>
-      </Dropdown>
-      <Divider orientation="vertical" />
-      <Tooltip title="Open in editor (Ctrl/⌘ E)">
-        <Button icon={<EditOutlined />} onClick={() => void s.openEditor(ids)}>
-          Edit
-        </Button>
+            }}
+          >
+            New Album…
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <Separator orientation="vertical" className="mx-1 h-5" />
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button variant="ghost" size="sm" onClick={() => void api.writeXmp(ids)}>
+            <FileDown data-icon="inline-start" />
+            Save to XMP
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-60">Writes stars, labels, keywords and captions to sidecar files that Lightroom and Capture One read.</TooltipContent>
       </Tooltip>
-      <Tooltip title="Write rating, label, keywords, title and caption to XMP sidecars so Lightroom, Capture One and others see them">
-        <Button icon={<CheckOutlined />} onClick={() => void api.writeXmp(ids)}>
-          Write XMP
-        </Button>
-      </Tooltip>
-      <Tooltip title="Clear selection (Esc)">
-        <Button type="text" icon={<CloseOutlined />} onClick={() => s.setSelected(new Set())} />
+      <Button size="sm" onClick={() => void s.openEditor(ids)}>
+        <Pencil data-icon="inline-start" />
+        Edit
+        <span className="text-xs opacity-60">{mac ? '⌘E' : 'Ctrl+E'}</span>
+      </Button>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button variant="ghost" size="icon-sm" aria-label="Clear selection" onClick={() => s.setSelected(new Set())}>
+            <X />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Clear selection (Esc)</TooltipContent>
       </Tooltip>
     </div>
   )

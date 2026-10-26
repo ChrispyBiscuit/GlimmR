@@ -57,7 +57,7 @@ function createWindow(): void {
     minWidth: 960,
     minHeight: 600,
     show: false,
-    title: 'GlimmR',
+    title: 'Glimmr',
     backgroundColor: '#0d0f12',
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     autoHideMenuBar: process.platform !== 'darwin',

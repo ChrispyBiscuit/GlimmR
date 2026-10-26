@@ -30,17 +30,26 @@ export const camera = (p: Photo): string | null => {
   return p.model
 }
 
-export const exposure = (p: Photo): string =>
-  [p.focal != null ? `${Math.round(p.focal)}mm` : null, p.aperture != null ? `ƒ/${Number(p.aperture.toFixed(1))}` : null, fmtShutter(p.shutter), p.iso != null ? `ISO ${p.iso}` : null]
-    .filter(Boolean)
-    .join('  ·  ')
+/** Exposure facts as separate parts ("23 mm", "ƒ/1.4", "1/250 s", "ISO 3200"), rendered with spacing rather than separators. */
+export const exposureParts = (p: Photo): string[] =>
+  [
+    p.focal != null ? `${Math.round(p.focal)}\u00a0mm` : null,
+    p.aperture != null ? `ƒ/${Number(p.aperture.toFixed(1))}` : null,
+    p.shutter != null ? `${fmtShutter(p.shutter)}${p.shutter < 1 ? '\u00a0s' : ''}` : null,
+    p.iso != null ? `ISO\u00a0${p.iso}` : null
+  ].filter((x): x is string => !!x)
 
 export const LABEL_COLORS: Record<string, string> = {
-  red: '#ff5a5f',
-  yellow: '#ffc53d',
-  green: '#52c41a',
-  blue: '#4096ff',
-  purple: '#b37feb'
+  red: '#e5534b',
+  yellow: '#e6b422',
+  green: '#46a758',
+  blue: '#3e8ed0',
+  purple: '#8e6bd8'
+}
+
+export const monthLabel = (day: string): string => {
+  const [y, m] = day.split('-').map(Number)
+  return new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' }).format(new Date(y, m - 1, 1))
 }
 
 export const quoteValue = (v: string): string => (/[\s"]/.test(v) ? `"${v.replace(/"/g, '')}"` : v)

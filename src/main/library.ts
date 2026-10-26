@@ -106,15 +106,16 @@ export class Library {
     if (sort.field === 'default') sort = { field: 'taken', dir: 'desc' }
     const ob = orderBy(sort, req.scope)
     try {
-      const ids = (
-        this.db
-          .prepare(`SELECT p.id FROM photos p ${where.join} WHERE ${where.sql} ${ob.sql}`)
-          .all(...where.params, ...ob.params) as { id: number }[]
-      ).map((r) => r.id)
+      const rows = this.db
+        .prepare(`SELECT p.id, p.width, p.height, p.taken_day FROM photos p ${where.join} WHERE ${where.sql} ${ob.sql}`)
+        .all(...where.params, ...ob.params) as { id: number; width: number | null; height: number | null; taken_day: string | null }[]
+      const ids = rows.map((r) => r.id)
+      const aspects = rows.map((r) => (r.width && r.height ? Math.round((r.width / r.height) * 1000) / 1000 : 1.5))
+      const days = rows.map((r) => r.taken_day)
       const page = ids.slice(req.offset, req.offset + req.limit)
-      return { total: ids.length, ids, photos: getPhotos(this.db, page), error: where.error, tookMs: Math.round(performance.now() - t0) }
+      return { total: ids.length, ids, aspects, days, photos: getPhotos(this.db, page), error: where.error, tookMs: Math.round(performance.now() - t0) }
     } catch (e) {
-      return { total: 0, ids: [], photos: [], error: `Search error: ${(e as Error).message}`, tookMs: 0 }
+      return { total: 0, ids: [], aspects: [], days: [], photos: [], error: `Search error: ${(e as Error).message}`, tookMs: 0 }
     }
   }
 

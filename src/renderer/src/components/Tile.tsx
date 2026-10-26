@@ -1,68 +1,73 @@
 import { memo, useState } from 'react'
-import { Button, Tooltip } from 'antd'
-import { EditOutlined, StarFilled, StarOutlined } from '@ant-design/icons'
+import { Flag, X } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { thumbUrl } from '../api'
-import { camera, exposure, fmtDate, LABEL_COLORS } from '../format'
+import { LABEL_COLORS, fmtDate } from '../format'
 import type { Photo } from '../../../shared/types'
 
 interface Props {
   photo: Photo | undefined
+  width: number
+  height: number
   selected?: boolean
   focused?: boolean
-  className?: string
   onClick?: (e: React.MouseEvent) => void
   onDoubleClick?: () => void
-  onRate?: (rating: number) => void
-  onEdit?: () => void
-  onContextMenu?: (e: React.MouseEvent) => void
+  tabIndex?: number
 }
 
-export const Tile = memo(function Tile({ photo, selected, focused, className, onClick, onDoubleClick, onRate, onEdit, onContextMenu }: Props) {
+/** One frame on the contact sheet. Marks (stars, flag, label) are always visible; the caption appears on hover. */
+export const Tile = memo(function Tile({ photo, width, height, selected, focused, onClick, onDoubleClick, tabIndex = -1 }: Props) {
   const [loaded, setLoaded] = useState(false)
   const [failed, setFailed] = useState(false)
-  if (!photo) return <div className={`tile ${className ?? ''}`} />
-  const cls = ['tile', className, selected && 'selected', focused && 'focused', photo.flag === 'reject' && 'rejected'].filter(Boolean).join(' ')
+  if (!photo) return <div className="shrink-0 bg-ink/5" style={{ width, height }} />
   return (
-    <div className={cls} onClick={onClick} onDoubleClick={onDoubleClick} onContextMenu={onContextMenu} data-id={photo.id}>
+    <button
+      type="button"
+      tabIndex={tabIndex}
+      data-id={photo.id}
+      aria-label={`${photo.title || photo.filename}, ${fmtDate(photo.takenAt, { dateStyle: 'medium' })}${photo.rating ? `, ${photo.rating} stars` : ''}${photo.flag ? `, ${photo.flag === 'pick' ? 'picked' : 'rejected'}` : ''}`}
+      aria-pressed={selected}
+      onClick={onClick}
+      onDoubleClick={onDoubleClick}
+      className={cn(
+        'group relative shrink-0 overflow-hidden bg-ink/5 outline-none focus-visible:outline-none',
+        selected && 'ring-2 ring-ink ring-offset-2 ring-offset-canvas',
+        focused && !selected && 'ring-1 ring-ink/60 ring-offset-1 ring-offset-canvas'
+      )}
+      style={{ width, height }}
+    >
       {!failed && (
         <img
           src={thumbUrl(photo.id, photo.mtime)}
-          className={loaded ? 'loaded' : ''}
+          width={Math.round(width)}
+          height={Math.round(height)}
           loading="lazy"
           decoding="async"
           draggable={false}
+          alt=""
           onLoad={() => setLoaded(true)}
           onError={() => setFailed(true)}
-          alt=""
+          className={cn('size-full object-cover transition-opacity duration-300', loaded ? 'opacity-100' : 'opacity-0', photo.flag === 'reject' && 'opacity-35 grayscale')}
         />
       )}
-      {failed && <div className="tile-missing">{photo.offline ? 'Offline' : 'No preview'}</div>}
-      <div className="tile-badges">
-        {photo.kind === 'raw' && <span className="badge">RAW</span>}
-        {photo.flag === 'pick' && <span className="badge" style={{ color: '#7ee787' }}>PICK</span>}
-        {photo.offline && <span className="badge" style={{ color: '#ff7875' }}>OFFLINE</span>}
-        {photo.rating > 0 && <span className="badge stars">{'★'.repeat(photo.rating)}</span>}
-        {photo.label && <span className="label-dot" style={{ background: LABEL_COLORS[photo.label] }} />}
-      </div>
-      {(onRate || onEdit) && (
-        <div className="tile-actions" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
-          {onRate && (
-            <Tooltip title={photo.rating >= 5 ? 'Clear rating' : 'Add a star (or press 1–5)'}>
-              <Button size="small" shape="circle" icon={photo.rating ? <StarFilled /> : <StarOutlined />} onClick={() => onRate(photo.rating >= 5 ? 0 : photo.rating + 1)} />
-            </Tooltip>
-          )}
-          {onEdit && (
-            <Tooltip title="Open in editor (Ctrl/⌘ E)">
-              <Button size="small" shape="circle" icon={<EditOutlined />} onClick={onEdit} />
-            </Tooltip>
-          )}
-        </div>
+      {failed && <span className="absolute inset-0 flex items-center justify-center text-xs text-ink-muted">{photo.offline ? 'Drive not connected' : 'No preview'}</span>}
+
+      {/* Marks, always visible, like china marker on a contact sheet. */}
+      {(photo.rating > 0 || photo.flag || photo.label) && (
+        <span className="absolute bottom-1.5 left-1.5 flex items-center gap-1.5 rounded-sm bg-black/55 px-1.5 py-0.5 text-[11px] leading-none text-white">
+          {photo.rating > 0 && <span className="text-[#f2c744]">{'★'.repeat(photo.rating)}</span>}
+          {photo.flag === 'pick' && <Flag className="size-3 fill-[#4cc38a] text-[#4cc38a]" aria-hidden />}
+          {photo.flag === 'reject' && <X className="size-3 text-[#e5534b]" aria-hidden />}
+          {photo.label && <span className="size-2 rounded-full" style={{ background: LABEL_COLORS[photo.label] }} aria-hidden />}
+        </span>
       )}
-      <div className="tile-overlay">
-        <div className="name">{photo.title || photo.filename}</div>
-        <div className="meta">{fmtDate(photo.takenAt, { dateStyle: 'medium' })}{camera(photo) ? ` · ${camera(photo)}` : ''}</div>
-        <div className="meta">{exposure(photo)}</div>
-      </div>
-    </div>
+      {(photo.kind === 'raw' || photo.offline) && (
+        <span className="absolute top-1.5 right-1.5 rounded-sm bg-black/55 px-1 py-px text-[10px] font-medium text-white">{photo.offline ? 'Offline' : 'RAW'}</span>
+      )}
+      <span className="pointer-events-none absolute inset-x-0 top-0 truncate bg-gradient-to-b from-black/60 to-transparent px-2 pt-1.5 pb-4 text-left text-[11px] text-white opacity-0 transition-opacity group-hover:opacity-100">
+        {photo.title || photo.filename}
+      </span>
+    </button>
   )
 })

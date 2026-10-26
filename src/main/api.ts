@@ -273,7 +273,7 @@ export function createApi(ctx: AppContext): Api {
     listBackups: () => listBackups(lib().getSettings().backup.destination),
     chooseBackupToRestore: async () => {
       const r = await dialog.showOpenDialog(ctx.window!, {
-        title: 'Choose a GlimmR backup folder (ends in .glimmr-backup)',
+        title: 'Choose a Glimmr backup folder (ends in .glimmr-backup)',
         defaultPath: lib().getSettings().backup.destination ?? undefined,
         properties: ['openDirectory']
       })
@@ -288,6 +288,11 @@ export function createApi(ctx: AppContext): Api {
     chooseFolder: (title) => pickFolder(title),
     restore: (plan) => ctx.restore(plan.backupPath, plan.rootMap),
     appVersion: () => app.getVersion(),
+    brandFont: () => {
+      const dir = path.join(__dirname, '../renderer/fonts')
+      const file = ['akira-expanded.woff2', 'akira-expanded.otf', 'akira-expanded.ttf'].find((f) => fs.existsSync(path.join(dir, f)))
+      return file ? `fonts/${file}` : null
+    },
     platform: () => process.platform
   }
 }

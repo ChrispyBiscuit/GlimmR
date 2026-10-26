@@ -86,6 +86,8 @@ export interface Api {
   chooseFolder(title: string): Promise<string | null>
   restore(plan: RestorePlan): Promise<void>
   appVersion(): string
+  /** Relative URL of a provided Akira Expanded font file, if one was added to the app. */
+  brandFont(): string | null
   platform(): string
 }
 

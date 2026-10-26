@@ -110,6 +110,10 @@ export interface SearchRequest {
 export interface SearchResult {
   total: number
   ids: number[]
+  /** width / height for every id, for laying out justified rows without loading each photo. */
+  aspects: number[]
+  /** Local day taken (YYYY-MM-DD) for every id, for date sections and the year scrubber. */
+  days: (string | null)[]
   photos: Photo[]
   error?: string
   tookMs: number

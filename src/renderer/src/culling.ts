@@ -17,4 +17,4 @@ export function cullingUpdate(e: KeyboardEvent, currentLabel: ColorLabel | undef
   return null
 }
 
-export const isTyping = (e: KeyboardEvent): boolean => !!(e.target as HTMLElement)?.closest?.('input, textarea, [contenteditable], .ant-select')
+export const isTyping = (e: KeyboardEvent): boolean => !!(e.target as HTMLElement)?.closest?.('input, textarea, select, [contenteditable]')

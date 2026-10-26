@@ -1,13 +1,13 @@
-# GlimmR
+# Glimmr
 
-**A calm, fast desktop library for your photos.** GlimmR stores, sorts, organizes, searches and shows a personal
-photo collection on Windows and macOS. It browses like a stock-media site (one big search box, facets beside a
-dark grid of large previews) and hands photos to Lightroom, Capture One or any editor you choose. It does not
+**A calm, fast desktop library for your photos.** Glimmr stores, sorts, organizes, searches and shows a personal
+photo collection on Windows and macOS. It browses like a stock-media site (one big search box, a filter bar and a
+grid of photos at their true shapes) and hands photos to Lightroom, Capture One or any editor you choose. It does not
 edit photos.
 
 ![Rediscover](docs/screenshots/02-rediscover.png)
 
-- **Your files stay where they are.** Add folders; GlimmR catalogs them in place and never moves, renames or
+- **Your files stay where they are.** Add folders; Glimmr catalogs them in place and never moves, renames or
   modifies originals.
 - **Search by anything.** Free text over every field, plus `camera:"X-T5"`, `iso:>1600`, `focal:24..70`,
   `date:2019-07`, `rating:>=4`, `-keyword:test`, and any raw EXIF/IPTC/XMP key such as `ExposureProgram:Manual`.
@@ -24,13 +24,27 @@ edit photos.
 - **Interoperable.** Reads ratings, labels and keywords from Lightroom, Capture One, Bridge and darktable sidecars.
   It can write them back to XMP sidecars, merging with existing ones.
 
-| Search and facets | Viewer |
+| Photos by month | Filters |
 |---|---|
-| ![Search](docs/screenshots/04-search.png) | ![Viewer](docs/screenshots/07-viewer.png) |
-| **Backups** | **Restore wizard** |
-| ![Backup](docs/screenshots/09-backup.png) | ![Restore](docs/screenshots/13-restore-map.png) |
+| ![Photos](docs/screenshots/03-photos.png) | ![Camera filter](docs/screenshots/04-filter-camera.png) |
+| **Culling a selection** | **Viewer** |
+| ![Selection](docs/screenshots/08-selection.png) | ![Viewer](docs/screenshots/09-viewer.png) |
+| **Backup** | **Restore** |
+| ![Backup](docs/screenshots/11-backup.png) | ![Restore](docs/screenshots/15-restore-locations.png) |
 
-Product docs: [research](docs/RESEARCH.md) · [PRD](docs/PRD.md)
+Product docs: [research](docs/RESEARCH.md), [PRD](docs/PRD.md) and [UI design](docs/DESIGN.md).
+
+## Design
+
+The interface follows [docs/DESIGN.md](docs/DESIGN.md). Photos sit on neutral grey so their colours read
+correctly, every photo keeps its real shape in justified rows grouped by month, and a year scrubber jumps
+through time. It's built with shadcn/ui (Radix) and Tailwind CSS v4, and checked against Vercel's Web Interface
+Guidelines and Anthropic's frontend-design guidance.
+
+The wordmark is set in **Akira Expanded**. It's a commercial font, so it isn't included. Glimmr uses it if it's
+installed, or if you put a licensed `akira-expanded.woff2` (or `.otf`/`.ttf`) in `src/renderer/public/fonts/`.
+Otherwise a close fallback is used. All other text is **Archivo**, whose width axis gives headings the same
+expanded proportions.
 
 ## Run it
 
@@ -58,9 +72,9 @@ portable use or testing).
 ## How it works
 
 ```
-Electron main (Node)                                    Renderer (React + Ant Design)
+Electron main (Node)                                    Renderer (React + shadcn/ui + Tailwind)
  ├─ catalog.db  SQLite (node:sqlite, WAL, FTS5)          ├─ Search bar with autocomplete + chips
- ├─ scanner     walk → exifr metadata → sharp previews   ├─ Facets, virtualized grid, selection bar
+ ├─ scanner     walk → exifr metadata → sharp previews   ├─ Filter bar, justified grid, selection bar
  ├─ query       search syntax → parameterized SQL        ├─ Viewer, Rediscover, Settings
  ├─ editors     detect + launch                          └─ talks to main via a typed IPC bridge
  ├─ backup      VACUUM INTO snapshot, SHA-256 manifest,
@@ -71,11 +85,11 @@ Electron main (Node)                                    Renderer (React + Ant De
 - **Catalog**: `photos` (normalized fields), `metadata` (every EXIF/IPTC/XMP key/value, numeric values typed for
   comparisons and sorting), `keywords` (hierarchical, `Places>Portugal>Lisbon`), `albums`, `smart_albums`,
   `settings`, and a full-text index over all text.
-- **Previews**: RAW files are never decoded. GlimmR extracts the largest embedded JPEG, which is why browsing
+- **Previews**: RAW files are never decoded. Glimmr extracts the largest embedded JPEG, which is why browsing
   RAW is fast. HEIC falls back to the embedded thumbnail, or to `sips` on macOS. Formats Chromium can't display
   are viewed through 2560 px previews; JPEG, PNG, WebP and AVIF show the original at 100% zoom.
-- **Your data**: the catalog lives in the app-data folder (`%APPDATA%\GlimmR\Library` or
-  `~/Library/Application Support/GlimmR/Library`). Previews are a disposable cache.
+- **Your data**: the catalog lives in the app-data folder (`%APPDATA%\Glimmr\Library` or
+  `~/Library/Application Support/Glimmr/Library`). Previews are a disposable cache.
 - **Editors**: Lightroom Classic and Capture One are catalog-based, so opening a file outside their catalog
   shows their import window. Ratings and keywords only reach them through XMP sidecars (Settings → Library →
   *Write XMP*, or *Write XMP* on a selection).
@@ -120,7 +134,6 @@ v1.0 MVP: the PRD's P0 requirements are implemented, with these gaps:
 
 - Dragging photos onto an album (ORG-1) isn't built yet. Use the selection bar, the context menu or "+" in
   the sidebar instead.
-- The info panel shows a summary plus a filterable list of all fields, not the grouped sections META-7 describes.
 - Performance targets are met for most queries; see the table above.
 
 Planned next (P1): folder watching, RAW+JPEG stacking, map view, color search, compare view and automatic XMP

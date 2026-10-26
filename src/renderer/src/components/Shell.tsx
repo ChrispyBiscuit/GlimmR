@@ -1,6 +1,10 @@
 import { useState } from 'react'
-import { App, Button, Layout, Result, Tooltip } from 'antd'
-import { FolderAddOutlined, SettingOutlined } from '@ant-design/icons'
+import { FolderPlus, Settings } from 'lucide-react'
+import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { cn } from '@/lib/utils'
 import { useStore } from '../store'
 import { api, bridge } from '../api'
 import { Sidebar } from './Sidebar'
@@ -8,79 +12,82 @@ import { SearchBar } from './SearchBar'
 import { Browse } from './Browse'
 import { Rediscover } from './Rediscover'
 import { Viewer } from './Viewer'
-import { SettingsModal } from './SettingsModal'
+import { SettingsPage } from './SettingsPage'
+
+const mac = navigator.userAgent.includes('Mac')
 
 export function Shell() {
   const s = useStore()
-  const empty = s.roots.length === 0
-  const { message } = App.useApp()
   const [dropping, setDropping] = useState(false)
+  const empty = s.roots.length === 0 && s.view !== 'settings'
 
-  // Drop folders anywhere on the window to add them to the library.
-  const onDrop = async (e: React.DragEvent): Promise<void> => {
-    e.preventDefault()
-    setDropping(false)
-    for (const f of Array.from(e.dataTransfer.files)) {
-      try {
-        const root = await api.addRoot(bridge().pathForFile(f))
-        if (root) message.success(`Added “${root.name}”. Scanning…`)
-      } catch (err) {
-        message.error((err as Error).message.replace(/^Error invoking remote method 'api': Error: /, ''))
-      }
+  const addFolder = async (dir?: string): Promise<void> => {
+    try {
+      const root = await api.addRoot(dir)
+      if (root) toast.success(`Added ${root.name}`, { description: 'Looking for photos…' })
+    } catch (err) {
+      toast.error('That folder couldn’t be added', { description: (err as Error).message.replace(/^Error invoking remote method 'api': Error: /, '') })
     }
     void s.refreshSidebar()
   }
 
   return (
-    <Layout
-      style={{ height: '100%', overflow: 'clip', outline: dropping ? '3px dashed var(--accent)' : 'none', outlineOffset: -6 }}
+    <div
+      className={cn('grid h-full grid-cols-[232px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)]', dropping && 'outline-2 -outline-offset-8 outline-dashed outline-ink')}
       onDragOver={(e) => {
         if (!e.dataTransfer.types.includes('Files')) return
         e.preventDefault()
         setDropping(true)
       }}
       onDragLeave={(e) => e.currentTarget === e.target && setDropping(false)}
-      onDrop={onDrop}
+      onDrop={async (e) => {
+        e.preventDefault()
+        setDropping(false)
+        for (const f of Array.from(e.dataTransfer.files)) await addFolder(bridge().pathForFile(f))
+      }}
     >
-      <Layout.Sider width={256} style={{ borderRight: '1px solid var(--line)' }}>
-        <Sidebar />
-      </Layout.Sider>
-      <Layout style={{ overflow: 'clip' }}>
-        <Layout.Header className="app-drag" style={{ height: 68, lineHeight: 'normal', padding: '0 20px', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <SearchBar />
-          <Tooltip title="Settings">
-            <Button type="text" icon={<SettingOutlined />} onClick={() => s.setSettingsOpen('library')} />
-          </Tooltip>
-        </Layout.Header>
-        <Layout.Content style={{ position: 'relative', minHeight: 0, overflow: 'clip' }}>
+      <Sidebar onAddFolder={() => void addFolder()} />
+      <main className="flex min-h-0 min-w-0 flex-col bg-canvas">
+        {s.view !== 'settings' && (
+          <header className={cn('app-drag flex h-14 shrink-0 items-center gap-2 border-b bg-panel px-4', mac && 'pt-1')}>
+            <SearchBar />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon-sm" aria-label="Settings" onClick={() => s.openSettings()}>
+                  <Settings />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Settings</TooltipContent>
+            </Tooltip>
+          </header>
+        )}
+        <div className="relative min-h-0 flex-1">
           {empty ? (
-            <div className="empty">
-              <Result
-                icon={<span style={{ fontSize: 64 }}>✦</span>}
-                title="Welcome to GlimmR"
-                subTitle={
-                  <span>
-                    Add the folders where your photos live. GlimmR catalogs them where they are and never changes your files.
-                    <br />
-                    RAW, JPEG, HEIC, TIFF, PNG and more. You can also drop folders onto this window.
-                  </span>
-                }
-                extra={
-                  <Button type="primary" size="large" icon={<FolderAddOutlined />} onClick={async () => (await api.addRoot()) && s.refreshSidebar()}>
-                    Add a photo folder
-                  </Button>
-                }
-              />
-            </div>
+            <Empty className="h-full">
+              <EmptyHeader>
+                <EmptyTitle className="display text-2xl">Bring your photos in</EmptyTitle>
+                <EmptyDescription className="text-pretty">
+                  Choose the folders where your photos already live. Glimmr catalogs them in place and never moves or changes a file. You can also drop
+                  folders onto this window.
+                </EmptyDescription>
+              </EmptyHeader>
+              <EmptyContent>
+                <Button size="lg" onClick={() => void addFolder()}>
+                  <FolderPlus data-icon="inline-start" />
+                  Add a Photo Folder
+                </Button>
+              </EmptyContent>
+            </Empty>
           ) : s.view === 'rediscover' ? (
             <Rediscover />
+          ) : s.view === 'settings' ? (
+            <SettingsPage />
           ) : (
             <Browse />
           )}
-        </Layout.Content>
-      </Layout>
+        </div>
+      </main>
       {s.viewer && <Viewer />}
-      <SettingsModal />
-    </Layout>
+    </div>
   )
 }
