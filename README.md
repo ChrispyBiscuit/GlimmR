@@ -41,10 +41,9 @@ correctly, every photo keeps its real shape in justified rows grouped by month, 
 through time. It's built with shadcn/ui (Radix) and Tailwind CSS v4, and checked against Vercel's Web Interface
 Guidelines and Anthropic's frontend-design guidance.
 
-The wordmark is set in **Akira Expanded**. It's a commercial font, so it isn't included. Glimmr uses it if it's
-installed, or if you put a licensed `akira-expanded.woff2` (or `.otf`/`.ttf`) in `src/renderer/public/fonts/`.
-Otherwise a close fallback is used. All other text is **Archivo**, whose width axis gives headings the same
-expanded proportions.
+The wordmark is set in **Unbounded Black**, an open-licence face with an Akira Expanded feel. The app icon is its "G"
+(`npm run icon` regenerates it). All other text is **Archivo**, whose width axis gives headings the same wide
+proportions. Both fonts are SIL OFL and ship with the app.
 
 ## Run it
 

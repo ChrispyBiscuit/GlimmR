@@ -299,11 +299,6 @@ export function createApi(ctx: AppContext): Api {
     downloadUpdate: () => ctx.updater.download(),
     installUpdate: () => ctx.updater.install(),
     openReleasePage: () => ctx.updater.openReleasePage(),
-    brandFont: () => {
-      const dir = path.join(__dirname, '../renderer/fonts')
-      const file = ['akira-expanded.woff2', 'akira-expanded.otf', 'akira-expanded.ttf'].find((f) => fs.existsSync(path.join(dir, f)))
-      return file ? `fonts/${file}` : null
-    },
     platform: () => process.platform,
     setTitleBarTheme: (theme) => {
       if (process.platform === 'darwin' || !ctx.window || ctx.window.isDestroyed()) return

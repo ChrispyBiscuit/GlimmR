@@ -5,11 +5,8 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { StoreProvider, useStore } from './store'
 import { DialogHost } from './dialogs'
 import { Shell } from './components/Shell'
-import { loadBrandFont } from './fonts'
 import { api } from './api'
 import './styles.css'
-
-void loadBrandFont()
 
 function useSystemDark(): boolean {
   const [dark, setDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)

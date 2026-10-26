@@ -1,7 +1,8 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
-/* Archivo's width axis (62–125%) lets headings share the expanded proportions of the Akira wordmark. */
+/* Archivo's width axis (62–125%) lets headings echo the wide wordmark; Unbounded Black is the wordmark itself (both OFL). */
 @import '@fontsource-variable/archivo/wdth.css';
+@import '@fontsource/unbounded/900.css';
 
 /* Neutral, zero-hue greys: tinted backgrounds shift how photo colour is perceived. See docs/DESIGN.md. */
 :root {
@@ -57,8 +58,7 @@
 
 @theme inline {
   --font-sans: 'Archivo Variable', 'Segoe UI', system-ui, sans-serif;
-  /* Akira Expanded is loaded at runtime when available (see fonts.ts); Archivo at full width stands in. */
-  --font-brand: 'Akira Expanded', 'Archivo Variable', 'Segoe UI', sans-serif;
+  --font-brand: 'Unbounded', 'Archivo Variable', 'Segoe UI', sans-serif;
   --color-canvas: var(--canvas);
   --color-panel: var(--panel);
   --color-raised: var(--raised);
@@ -148,13 +148,12 @@
     scrollbar-width: thin;
     scrollbar-color: var(--line) transparent;
   }
-  /* The wordmark: Akira Expanded, always caps. The fallback is pushed to Archivo's widest, heaviest cut. */
+  /* The wordmark: Unbounded Black, always caps. */
   .brand {
     font-family: var(--font-brand);
-    font-stretch: 125%;
     font-weight: 900;
     text-transform: uppercase;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.01em;
   }
   /* Display type for time and place: Archivo expanded, echoing the wordmark without shouting. */
   .display {

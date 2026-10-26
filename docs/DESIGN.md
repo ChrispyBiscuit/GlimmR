@@ -58,12 +58,12 @@ the way a loupe or china marker circles a frame on a contact sheet.
 
 The wordmark sets the voice and everything else is tuned to it.
 
-- **Akira Expanded** is used for the **Glimmr wordmark only**, always in caps. It's a commercial font
-  (Typologic), so it isn't bundled. The app uses it when it's installed on the system or when a licensed file is
-  placed in `src/renderer/public/fonts/` (see the README there). Until then, the wordmark falls back to Archivo
-  at 125% width and weight 900, which keeps the same wide, heavy silhouette.
+- **Unbounded Black** (SIL Open Font License) is used for the **Glimmr wordmark only**, always in caps. It was
+  chosen as the closest open-licence match to Akira Expanded, the requested look: very wide, very heavy, flat
+  terminals and rounded-square geometry. Because it's OFL, it's bundled with the app and committed to the repo.
+  The app icon is its "G", converted to an outline.
 - **Archivo** (variable, with width and weight axes, OFL) is used for everything else. Its width axis lets one family
-  echo Akira's proportions:
+  echo the wordmark's wide proportions:
   - **Display** (125% width, weight 600) for time and place: month headers ("October 2023"), Rediscover chapters,
     and the date in the viewer. This is the one bold place after the logo.
   - **UI** (100% width, weights 400–600, 13 px base) for all functional text, with tabular figures for counts and
@@ -73,7 +73,7 @@ The wordmark sets the voice and everything else is tuned to it.
 
 Pairing a super-wide display face with a neutral grotesk is a classic combination. Using one variable family at two
 widths, rather than two unrelated faces, keeps the system tight. The serif from the first plan was dropped: it
-argued with Akira's geometry.
+argued with the wordmark's geometry.
 
 ### Layout
 
@@ -114,7 +114,7 @@ Text is left-aligned throughout. Numbers use tabular figures.
 
 1. **Photos are the interface.** Chrome is quiet, grey and recedes. No decorative gradients, cards or shadows on the canvas.
 2. **Time is the spine.** Dates are always visible, and jumping across years is one gesture.
-3. **One bold voice.** Akira for the name, expanded Archivo for time and place, and nothing else shouts.
+3. **One bold voice.** Unbounded for the name, expanded Archivo for time and place, and nothing else shouts.
 4. **Marks, not decoration.** Colour only means something: rating, pick, reject or label.
 5. **Keyboard first, accessible always.** Visible `:focus-visible` rings, labelled icon buttons, real buttons,
    `prefers-reduced-motion` respected, hit targets of at least 28 px in dense UI.
@@ -123,7 +123,7 @@ Text is left-aligned throughout. Numbers use tabular figures.
 
 - *Is the palette a generated default?* No. Neutral grey is a functional requirement for judging photo colour, and
   the near-black and single-accent template is gone.
-- *Is the type default?* No. The wordmark is Akira Expanded by request. Archivo was chosen because its width
+- *Is the type default?* No. The wordmark matches the requested Akira Expanded look using Unbounded Black. Archivo was chosen because its width
   axis can match it, and it has tabular figures for camera data.
 - *Are there template tells?* No all-caps eyebrows, no stat tiles, no middle-dot meta strings, no arrows appended to links,
   no cards on the canvas.
