@@ -41,6 +41,8 @@ export interface Photo {
 
 export interface PhotoDetail extends Photo {
   keywords: string[]
+  /** Smart tags found on this computer, best first. */
+  smartTags: SmartTag[]
   albums: { id: number; name: string }[]
   metadata: { key: string; value: string }[]
 }
@@ -187,6 +189,24 @@ export interface AppSettings {
   autoAdvance: boolean
   editors: EditorSettings
   backup: BackupSettings
+  smartTags: { enabled: boolean }
+}
+
+export interface SmartTag {
+  tag: string
+  /** subject, scene, event or attribute */
+  group: string
+  score: number
+}
+
+export interface SmartTagStatus {
+  enabled: boolean
+  /** The model is downloaded and verified. */
+  installed: boolean
+  /** Download size of the model, in bytes. */
+  modelSize: number
+  tagged: number
+  total: number
 }
 
 export interface BackupManifest {
@@ -213,7 +233,7 @@ export interface RestorePlan {
 
 export interface JobProgress {
   id: string
-  kind: 'scan' | 'backup' | 'restore' | 'xmp'
+  kind: 'scan' | 'backup' | 'restore' | 'xmp' | 'model' | 'tags'
   label: string
   done: number
   total: number

@@ -551,6 +551,31 @@ export function Viewer() {
                 </p>
               )}
             </Group>
+            {detail.smartTags.length > 0 && (
+              <Group title="Smart tags">
+                <ul className="flex flex-wrap gap-1.5" aria-label="Smart tags">
+                  {detail.smartTags.map((t) => (
+                    <li key={t.tag} className="inline-flex h-6 items-center gap-0.5 rounded-full border bg-raised pr-1 pl-2.5 text-xs">
+                      <button type="button" className="underline-offset-2 hover:underline" title={`Find photos tagged ${t.tag}`} onClick={() => searchFor(`auto:=${quoteValue(t.tag)}`)}>
+                        {t.tag}
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Remove smart tag ${t.tag}`}
+                        title="Not right? Remove it"
+                        className="rounded-full p-0.5 text-ink-muted hover:bg-accent hover:text-ink"
+                        onClick={async () => {
+                          await api.hideSmartTag(id, t.tag)
+                          setDetail(await api.detail(id))
+                        }}
+                      >
+                        <X className="size-3" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </Group>
+            )}
             <Group title="Capture">
               <dl>
                 {camera(detail) && <Row k="Camera" v={camera(detail)} onClick={() => searchFor(`camera:=${quoteValue(`${detail.make ?? ''} ${detail.model ?? ''}`.trim())}`)} />}

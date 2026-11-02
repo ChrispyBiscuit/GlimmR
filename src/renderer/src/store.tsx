@@ -103,7 +103,11 @@ function useStoreValue() {
         // Jobs can change settings in the main process (e.g. last backup time).
         void api.getSettings().then(setSettingsState)
         if (p.error) toast.error(p.label, { description: p.error, duration: 8000 })
-        else if (p.kind !== 'scan' || (p.message && !p.message.startsWith('0 new, 0 updated'))) toast.success(p.label, { description: p.message })
+        // Scans and tagging run often in the background; only mention the ones that changed something notable.
+        else if (p.kind === 'tags' ? p.total >= 100 : p.kind !== 'scan' || (p.message && !p.message.startsWith('0 new, 0 updated')))
+          toast.success(p.kind === 'tags' ? 'Smart tags are ready' : p.kind === 'model' ? 'Smart tag model downloaded' : p.label, {
+            description: p.kind === 'model' ? 'Finding subjects in your photos…' : p.message
+          })
       }
     })
     // Throttle library refreshes while a scan streams in.

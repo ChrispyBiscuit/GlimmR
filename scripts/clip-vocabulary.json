@@ -1,0 +1,238 @@
+{
+  "_comment": "Smart tag vocabulary. Each group is scored with a softmax over its labels, so labels in a group are alternatives. 'prompts' are averaged (prompt ensembling); {} in a template is replaced by the label's 'text'. Labels whose tag is null are distractors that are never stored. After editing, rebuild src/main/tagging/clip-labels.json with scripts/build-clip-labels.py. Attributes are yes/no pairs; when 'suppresses' fires, those groups are dropped (a document has no place).",
+  "templates": {
+    "subject": [
+      "a photo of {}.",
+      "a close-up photo of {}.",
+      "a photo with {} in it.",
+      "a picture of {}."
+    ],
+    "scene": [
+      "a photo of {}.",
+      "a photo taken at {}.",
+      "a landscape photo of {}.",
+      "a picture of {}."
+    ],
+    "event": [
+      "a photo of {}.",
+      "a photo taken at {}.",
+      "a picture from {}."
+    ]
+  },
+  "groups": [
+    {
+      "id": "subject",
+      "title": "Subjects",
+      "template": "subject",
+      "threshold": 0.18,
+      "max": 3,
+      "labels": [
+        { "tag": "person", "text": "a person" },
+        { "tag": "portrait", "text": "a portrait of a person's face" },
+        { "tag": "group", "text": "a group of people posing together" },
+        { "tag": "crowd", "text": "a large crowd of people" },
+        { "tag": "baby", "text": "a baby" },
+        { "tag": "child", "text": "a young child" },
+        { "tag": "dog", "text": "a dog" },
+        { "tag": "cat", "text": "a cat" },
+        { "tag": "bird", "text": "a bird" },
+        { "tag": "horse", "text": "a horse" },
+        { "tag": "farm animals", "text": "cows, sheep or goats" },
+        { "tag": "wildlife", "text": "a wild animal" },
+        { "tag": "fish", "text": "fish" },
+        { "tag": "insect", "text": "an insect or butterfly" },
+        { "tag": "car", "text": "a car" },
+        { "tag": "motorcycle", "text": "a motorcycle" },
+        { "tag": "bicycle", "text": "a bicycle" },
+        { "tag": "boat", "text": "a boat" },
+        { "tag": "airplane", "text": "an airplane" },
+        { "tag": "train", "text": "a train" },
+        { "tag": "rocket", "text": "a rocket" },
+        { "tag": "food", "text": "a plate of food" },
+        { "tag": "drink", "text": "a drink, coffee or cocktail" },
+        { "tag": "cake", "text": "a cake or dessert" },
+        { "tag": "flowers", "text": "flowers" },
+        { "tag": "plants", "text": "plants and leaves" },
+        { "tag": "tree", "text": "a tree" },
+        { "tag": "building", "text": "a building" },
+        { "tag": "architecture", "text": "interesting architecture" },
+        { "tag": "bridge", "text": "a bridge" },
+        { "tag": "monument", "text": "a famous landmark or monument" },
+        { "tag": "artwork", "text": "a painting or artwork" },
+        { "tag": "sign", "text": "a sign with writing on it" },
+        { "tag": "toys", "text": "toys" },
+        { "tag": "moon", "text": "the moon" },
+        { "tag": "stars", "text": "stars and galaxies in space" },
+        { "tag": null, "text": "an object" },
+        { "tag": null, "text": "a texture or pattern" },
+        { "tag": null, "text": "something" }
+      ]
+    },
+    {
+      "id": "scene",
+      "title": "Places",
+      "template": "scene",
+      "threshold": 0.4,
+      "max": 2,
+      "labels": [
+        { "tag": "beach", "text": "a beach" },
+        { "tag": "ocean", "text": "the ocean" },
+        { "tag": "lake", "text": "a lake" },
+        { "tag": "river", "text": "a river" },
+        { "tag": "waterfall", "text": "a waterfall" },
+        { "tag": "mountains", "text": "mountains" },
+        { "tag": "forest", "text": "a forest" },
+        { "tag": "countryside", "text": "fields in the countryside" },
+        { "tag": "desert", "text": "a desert" },
+        { "tag": "snow", "text": "a snowy landscape" },
+        { "tag": "park", "text": "a park" },
+        { "tag": "garden", "text": "a garden" },
+        { "tag": "city", "text": "a city street" },
+        { "tag": "skyline", "text": "a city skyline" },
+        { "tag": "road", "text": "a road or highway" },
+        { "tag": "harbor", "text": "a harbor with boats" },
+        { "tag": "home", "text": "a living room at home" },
+        { "tag": "kitchen", "text": "a kitchen" },
+        { "tag": "restaurant", "text": "a restaurant or cafe" },
+        { "tag": "office", "text": "an office" },
+        { "tag": "classroom", "text": "a classroom" },
+        { "tag": "church", "text": "the inside of a church" },
+        { "tag": "museum", "text": "a museum" },
+        { "tag": "shop", "text": "a shop or market" },
+        { "tag": "stadium", "text": "a sports stadium" },
+        { "tag": "stage", "text": "a stage" },
+        { "tag": "airport", "text": "an airport" },
+        { "tag": "pool", "text": "a swimming pool" },
+        { "tag": "underwater", "text": "underwater" },
+        { "tag": "sky", "text": "the sky and clouds" },
+        { "tag": "space", "text": "outer space" },
+        { "tag": null, "text": "a plain background" },
+        { "tag": null, "text": "a room" },
+        { "tag": null, "text": "an unknown place" }
+      ]
+    },
+    {
+      "id": "event",
+      "title": "Events",
+      "template": "event",
+      "threshold": 0.7,
+      "max": 1,
+      "labels": [
+        { "tag": "wedding", "text": "a wedding" },
+        { "tag": "birthday", "text": "a birthday party" },
+        { "tag": "party", "text": "a party" },
+        { "tag": "christmas", "text": "Christmas" },
+        { "tag": "halloween", "text": "Halloween" },
+        { "tag": "concert", "text": "a concert" },
+        { "tag": "sports", "text": "a sports game" },
+        { "tag": "graduation", "text": "a graduation ceremony" },
+        { "tag": "hiking", "text": "a hike" },
+        { "tag": "camping", "text": "a camping trip" },
+        { "tag": "fireworks", "text": "fireworks" },
+        { "tag": null, "text": "an ordinary day" },
+        { "tag": null, "text": "everyday life" },
+        { "tag": null, "text": "a random moment" },
+        { "tag": null, "text": "a portrait of a person" },
+        { "tag": null, "text": "a person at work" },
+        { "tag": null, "text": "a landscape" },
+        { "tag": null, "text": "an object" },
+        { "tag": null, "text": "outer space" }
+      ]
+    }
+  ],
+  "attributes": [
+    {
+      "tag": "black and white",
+      "yes": [
+        "a black and white photo.",
+        "a monochrome photo."
+      ],
+      "no": [
+        "a color photo.",
+        "a colorful photo."
+      ],
+      "threshold": 0.8
+    },
+    {
+      "tag": "night",
+      "yes": [
+        "a photo taken at night.",
+        "a dark night scene."
+      ],
+      "no": [
+        "a photo taken during the day.",
+        "a daylight scene."
+      ],
+      "threshold": 0.8
+    },
+    {
+      "tag": "sunset",
+      "yes": [
+        "a photo of a sunset.",
+        "a photo taken at sunrise or sunset."
+      ],
+      "no": [
+        "a photo taken in the middle of the day.",
+        "a photo."
+      ],
+      "threshold": 0.8
+    },
+    {
+      "tag": "aerial",
+      "yes": [
+        "an aerial photo taken from a drone.",
+        "a photo taken from an airplane window."
+      ],
+      "no": [
+        "a photo taken from the ground.",
+        "a photo taken at eye level."
+      ],
+      "threshold": 0.85
+    },
+    {
+      "tag": "selfie",
+      "yes": [
+        "a selfie.",
+        "a selfie taken with a phone."
+      ],
+      "no": [
+        "a photo taken by someone else.",
+        "a photo."
+      ],
+      "threshold": 0.85
+    },
+    {
+      "tag": "screenshot",
+      "yes": [
+        "a screenshot of a phone or computer screen.",
+        "a screenshot of an app."
+      ],
+      "no": [
+        "a photo taken with a camera.",
+        "a photograph."
+      ],
+      "threshold": 0.85,
+      "suppresses": [
+        "scene",
+        "event"
+      ]
+    },
+    {
+      "tag": "document",
+      "yes": [
+        "a photo of a document.",
+        "a scan of a page of text.",
+        "a photo of a receipt."
+      ],
+      "no": [
+        "a photo of a scene.",
+        "a photograph of the world."
+      ],
+      "threshold": 0.85,
+      "suppresses": [
+        "scene",
+        "event"
+      ]
+    }
+  ]
+}

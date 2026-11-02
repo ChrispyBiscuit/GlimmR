@@ -1,0 +1,13 @@
+{
+  "id": "clip-vit-b32-w8-v1",
+  "file": "clip-vit-b32-visual-w8.onnx",
+  "release": "models-v1",
+  "url": "https://github.com/ChrispyBiscuit/GlimmR/releases/download/models-v1/clip-vit-b32-visual-w8.onnx",
+  "sha256": "33988cb11dc8a84cd56d3361bf8fb4e9d84b4fc15581c7aa1cb6699feaa1e519",
+  "size": 98211142,
+  "source": {
+    "name": "OpenAI CLIP ViT-B/32 image encoder (MIT licence), ONNX export from Jina AI's clip-as-service",
+    "url": "https://clip-as-service.s3.us-east-2.amazonaws.com/models-436c69702d61732d53657276696365/onnx/ViT-B-32/visual.onnx",
+    "sha256": "06395063c0a5c28b1a8d4bd585261501a878c8f52d1216db6c4cbb651f7c13f1"
+  }
+}

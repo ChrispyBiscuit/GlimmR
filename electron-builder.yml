@@ -7,15 +7,22 @@ directories:
 files:
   - out/**
   - package.json
-# No native modules need rebuilding: SQLite is built into Electron (node:sqlite) and sharp ships prebuilt binaries.
+# No native modules need rebuilding: SQLite is built into Electron (node:sqlite); sharp and ONNX Runtime ship
+# prebuilt N-API binaries.
 npmRebuild: false
 # sharp loads libvips binaries at runtime, so they must stay outside the asar archive.
 asarUnpack:
   - node_modules/sharp/**
   - node_modules/@img/**
+  # ONNX Runtime's native binding loads its shared libraries from beside it.
+  - node_modules/onnxruntime-node/bin/**
 
 win:
   icon: build/icon.png
+  # ONNX Runtime (smart tags) ships binaries for every platform and architecture; keep only this build's.
+  files:
+    - '!node_modules/onnxruntime-node/bin/napi-v6/{darwin,linux}/**'
+    - '!node_modules/onnxruntime-node/bin/napi-v6/win32/!(${arch})/**'
   target:
     - target: nsis
       arch: [x64, arm64]
@@ -31,6 +38,9 @@ nsis:
 
 mac:
   icon: build/icon.png
+  files:
+    - '!node_modules/onnxruntime-node/bin/napi-v6/{win32,linux}/**'
+    - '!node_modules/onnxruntime-node/bin/napi-v6/darwin/!(${arch})/**'
   category: public.app-category.photography
   hardenedRuntime: true
   entitlements: build/entitlements.mac.plist
@@ -46,6 +56,10 @@ dmg:
 
 linux:
   icon: build/icon.png
+  files:
+    - '!node_modules/onnxruntime-node/bin/napi-v6/{darwin,win32}/**'
+    - '!node_modules/onnxruntime-node/bin/napi-v6/linux/!(${arch})/**'
+    - '!node_modules/onnxruntime-node/bin/napi-v6/linux/*/libonnxruntime_providers_{cuda,tensorrt}.so'
   category: Graphics
   target: [AppImage]
 

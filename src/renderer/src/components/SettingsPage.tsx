@@ -15,7 +15,8 @@ import { useStore } from '../store'
 import { api } from '../api'
 import { confirmDialog } from '../dialogs'
 import { fmtBytes, fmtDate, fmtNum } from '../format'
-import type { BackupEntry, EditorSettings } from '../../../shared/types'
+import { Progress } from '@/components/ui/progress'
+import type { BackupEntry, EditorSettings, SmartTagStatus } from '../../../shared/types'
 
 const mac = navigator.userAgent.includes('Mac')
 
@@ -23,6 +24,7 @@ const SECTIONS = [
   { key: 'library', label: 'Library' },
   { key: 'editors', label: 'Editors' },
   { key: 'backup', label: 'Backup' },
+  { key: 'smart-tags', label: 'Smart tags' },
   { key: 'appearance', label: 'Appearance' },
   { key: 'updates', label: 'Updates' },
   { key: 'help', label: 'Search help' }
@@ -562,6 +564,79 @@ function UpdatesSection() {
   )
 }
 
+function SmartTagsSection() {
+  const s = useStore()
+  const [status, setStatus] = useState<SmartTagStatus | null>(null)
+  const job = Object.values(s.jobs).find((j) => j.kind === 'model' || j.kind === 'tags')
+  const enabled = s.settings!.smartTags.enabled
+  useEffect(() => {
+    void api.smartTagStatus().then(setStatus)
+  }, [s.jobs, s.libraryVersion])
+
+  const setEnabled = async (on: boolean): Promise<void> => {
+    await s.setSettings({ smartTags: { enabled: on } })
+    if (on) api.enableSmartTags()
+    else api.disableSmartTags()
+  }
+  const mb = Math.round((status?.modelSize ?? 0) / 1e6)
+  const description = !enabled
+    ? `Turning this on downloads the recognition model once (${mb} MB). After that, new photos are tagged as they’re added.`
+    : job?.kind === 'model'
+      ? 'Downloading the recognition model…'
+      : !status?.installed
+        ? 'The model didn’t download. Check your connection and try again.'
+        : job
+          ? 'Finding subjects in your photos. You can keep browsing.'
+          : `${fmtNum(status.tagged)} of ${fmtNum(status.total)} photos tagged.`
+
+  return (
+    <Page
+      title="Smart tags"
+      intro="Glimmr can recognise what’s in your photos, like people, pets, food, places, events, black and white shots and documents, so you can search for them. It runs entirely on this computer using OpenAI’s CLIP model; your photos are never uploaded."
+    >
+      <div>
+        <Setting label="Find subjects in photos" description={description} htmlFor="smart-tags">
+          {enabled && status && !status.installed && !job && (
+            <Button variant="outline" size="sm" onClick={() => api.enableSmartTags()}>
+              <RefreshCw data-icon="inline-start" />
+              Try Again
+            </Button>
+          )}
+          <Switch id="smart-tags" checked={enabled} onCheckedChange={(v) => void setEnabled(v)} />
+        </Setting>
+        {job && (
+          <div className="flex flex-col gap-1.5 border-b pb-4">
+            <Progress value={job.total ? (job.done / job.total) * 100 : 0} className="h-1" />
+            <span className="tnum text-xs text-ink-muted">{job.message ?? 'Starting…'}</span>
+          </div>
+        )}
+        <Setting
+          label="Searching"
+          description="Search for a subject like dog, beach or wedding, or use auto:dog to match smart tags only. A photo’s tags are listed in its info panel, where you can remove a wrong one."
+        >
+          {null}
+        </Setting>
+        <Setting label="Remove smart tags" description="Turns smart tags off and deletes the model and every smart tag. Your own keywords aren’t touched.">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!status?.installed && !status?.tagged}
+            onClick={async () => {
+              if (await confirmDialog({ title: 'Remove smart tags?', description: 'The model and all smart tags are deleted. You can turn smart tags on again later.', confirmLabel: 'Remove', destructive: true })) {
+                await s.setSettings({ smartTags: { enabled: false } })
+                api.removeSmartTags()
+              }
+            }}
+          >
+            <Trash2 data-icon="inline-start" />
+            Remove
+          </Button>
+        </Setting>
+      </div>
+    </Page>
+  )
+}
+
 const HELP: [string, string][] = [
   ['sunset beach', 'Words match file and folder names, keywords, titles, captions, cameras, lenses, albums and every text metadata value. Partial words work: lisb finds Lisbon.'],
   ['"golden hour"', 'An exact phrase.'],
@@ -574,6 +649,7 @@ const HELP: [string, string][] = [
   ['date:2018..2020   date:>=2021-06', 'Date ranges and comparisons.'],
   ['flag:pick   label:red   rating:0', 'Marks.'],
   ['keyword:Portugal   album:"Trip"   folder:2021', 'Organization.'],
+  ['auto:dog   auto:beach   auto:"black and white"', 'Smart tags found on this computer (turn them on in Settings › Smart tags).'],
   ['type:raw   orientation:portrait', 'File type and shape.'],
   ['has:gps   has:keywords   is:offline', 'Whether something is present.'],
   ['ExposureProgram:Manual', 'Any EXIF, IPTC or XMP field by name. Click a value in the photo info panel to search for it.'],
@@ -627,7 +703,7 @@ function HelpSection() {
 export function SettingsPage() {
   const s = useStore()
   if (!s.settings) return null
-  const Section = { library: LibrarySection, editors: EditorsSection, backup: BackupSection, appearance: AppearanceSection, updates: UpdatesSection, help: HelpSection }[s.settingsSection] ?? LibrarySection
+  const Section = { library: LibrarySection, editors: EditorsSection, backup: BackupSection, 'smart-tags': SmartTagsSection, appearance: AppearanceSection, updates: UpdatesSection, help: HelpSection }[s.settingsSection] ?? LibrarySection
   return (
     <div className="flex h-full flex-col">
       <div className="flex min-h-0 flex-1">

@@ -98,10 +98,10 @@ app.whenReady().then(() => {
   if (process.platform === 'darwin') Menu.setApplicationMenu(Menu.buildFromTemplate([{ role: 'appMenu' }, { role: 'editMenu' }, { role: 'viewMenu' }, { role: 'windowMenu' }]))
   else Menu.setApplicationMenu(null)
   createWindow()
-  // Detect editors on first run, then catch up on library changes and scheduled backups.
+  // Detect editors on first run, then catch up on library changes, scheduled backups and smart tags.
   if (!ctx.library.getSettings().editors.editors.length) api.detectEditors()
   setTimeout(() => {
-    void ctx.scan().then(() => ctx.backupIfDue())
+    void ctx.scan().then(() => Promise.all([ctx.backupIfDue(), ctx.startSmartTags()]))
   }, 1500)
   setInterval(() => void ctx.backupIfDue(), 60 * 60 * 1000)
   ctx.updater.start()

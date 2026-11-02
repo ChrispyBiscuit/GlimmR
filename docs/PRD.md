@@ -136,6 +136,7 @@ Priority: **P0** = v1.0 MVP (built now), **P1** = v1.1, **P2** = later.
 | SRCH-11 | Color search by dominant color. | P1 |
 | SRCH-12 | Map view (GPS photos on a map; draw to filter). | P1 |
 | SRCH-13 | Face detection and people. | P2 |
+| SRCH-14 | **Smart tags**: on-device recognition of subjects, places, events and styles (CLIP), opt-in with a one-time model download, searchable as free text or `auto:`; wrong tags can be removed. No photo leaves the computer. | P1 (shipped) |
 
 ### 7.4 Browsing and viewing
 

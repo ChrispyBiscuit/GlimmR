@@ -334,7 +334,7 @@ export function Sidebar({ onAddFolder }: { onAddFolder: () => void }) {
                 </Button>
               </div>
               <Progress value={j.total ? (j.done / j.total) * 100 : 0} className="h-1" />
-              <span className="tnum text-[11px] text-ink-muted">{j.total ? `${fmtNum(j.done)} of ${fmtNum(j.total)}` : (j.message ?? 'Starting…')}</span>
+              <span className="tnum text-[11px] text-ink-muted">{j.kind === 'model' ? (j.message ?? 'Starting…') : j.total ? `${fmtNum(j.done)} of ${fmtNum(j.total)}` : (j.message ?? 'Starting…')}</span>
             </div>
           ))}
         </div>

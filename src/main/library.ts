@@ -2,6 +2,7 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
+import { photoTags } from './tagging/store'
 import { type Db, getPhotos, getKeywords, keywordId, normalizeKeyword, reindexFts, tx, PHOTO_COLUMNS, rowToPhoto } from './db'
 import { buildWhere, computeFacets, orderBy, suggest } from './query'
 import { writeSidecar } from './xmp'
@@ -30,7 +31,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   thumbSize: 220,
   autoAdvance: false,
   editors: { editors: [], defaultEditor: null, perType: {} },
-  backup: { destination: null, schedule: 'off', keep: 10, includeOriginals: false, lastBackupAt: null }
+  backup: { destination: null, schedule: 'off', keep: 10, includeOriginals: false, lastBackupAt: null },
+  smartTags: { enabled: false }
 }
 
 export class Library {
@@ -48,7 +50,8 @@ export class Library {
       ...DEFAULT_SETTINGS,
       ...saved,
       editors: { ...DEFAULT_SETTINGS.editors, ...saved.editors },
-      backup: { ...DEFAULT_SETTINGS.backup, ...saved.backup }
+      backup: { ...DEFAULT_SETTINGS.backup, ...saved.backup },
+      smartTags: { ...DEFAULT_SETTINGS.smartTags, ...saved.smartTags }
     }
   }
 
@@ -139,7 +142,7 @@ export class Library {
     const albums = this.db
       .prepare('SELECT a.id, a.name FROM album_photos ap JOIN albums a ON a.id = ap.album_id WHERE ap.photo_id = ? ORDER BY a.name')
       .all(id) as { id: number; name: string }[]
-    return { ...p, keywords: getKeywords(this.db, id), albums, metadata }
+    return { ...p, keywords: getKeywords(this.db, id), smartTags: photoTags(this.db, id), albums, metadata }
   }
 
   // ---- editing catalog metadata ----

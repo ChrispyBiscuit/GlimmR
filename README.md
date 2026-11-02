@@ -21,6 +21,10 @@ edit photos.
 - **Backup and restore.** Catalog backups with checksums and SQLite integrity checks, on a schedule with
   retention, plus an optional verified, incremental mirror of the originals. The restore wizard verifies the
   backup and lets you remap each library folder, including to the backup's own copy of the originals.
+- **Smart tags, on your computer.** Turn them on and Glimmr recognises subjects (people, pets, food, vehicles),
+  places (beach, mountains, city), events (wedding, concert) and styles (black and white, documents, screenshots),
+  so `dog` or `auto:beach` finds photos you never tagged. It uses OpenAI's CLIP model, downloaded once (98 MB),
+  and photos never leave the machine. Wrong tags can be removed from a photo's info panel.
 - **Interoperable.** Reads ratings, labels and keywords from Lightroom, Capture One, Bridge and darktable sidecars.
   It can write them back to XMP sidecars, merging with existing ones.
 
@@ -115,6 +119,7 @@ Electron main (Node)                                    Renderer (React + shadcn
  ├─ scanner     walk → exifr metadata → sharp previews   ├─ Filter bar, justified grid, selection bar
  ├─ query       search syntax → parameterized SQL        ├─ Viewer, Rediscover, Settings
  ├─ editors     detect + launch                          └─ talks to main via a typed IPC bridge
+ ├─ tagging     CLIP image encoder (ONNX Runtime), smart tags
  ├─ backup      VACUUM INTO snapshot, SHA-256 manifest,
  │              originals mirror, verify, restore
  └─ glimmr://   thumbnails, previews and originals
@@ -128,6 +133,15 @@ Electron main (Node)                                    Renderer (React + shadcn
   are viewed through 2560 px previews; JPEG, PNG, WebP and AVIF show the original at 100% zoom.
 - **Your data**: the catalog lives in the app-data folder (`%APPDATA%\Glimmr\Library` or
   `~/Library/Application Support/Glimmr/Library`). Previews are a disposable cache.
+- **Smart tags**: the CLIP ViT-B/32 image encoder runs through ONNX Runtime on thumbnails, in the background after
+  each scan. Each photo's embedding is kept (512 bytes) along with its tags (`photo_tags`, in the full-text index).
+  Tags come from a vocabulary of label groups (`scripts/clip-vocabulary.json`). Each group is a softmax over
+  alternatives, including "nothing in particular" options, so a tag is kept only when it clearly wins. The label
+  text embeddings are computed ahead of time by `scripts/build-clip-labels.py`, so the text model never ships. The
+  model is downloaded on demand from this repository's `models-v1` pre-release and checked against the SHA-256 in
+  `src/main/tagging/model.json`. CI rebuilds it reproducibly (`.github/workflows/models.yml`): the original ONNX
+  export, 8-bit weight-only quantized (352 → 98 MB, cosine ≥ 0.9998 to the original). It runs at about 30–90 ms
+  per photo on a laptop CPU, using half the cores.
 - **Editors**: Lightroom Classic and Capture One are catalog-based, so opening a file outside their catalog
   shows their import window. Ratings and keywords only reach them through XMP sidecars (Settings → Library →
   *Write XMP*, or *Write XMP* on a selection).

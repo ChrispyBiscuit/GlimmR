@@ -1,9 +1,9 @@
 // Implements the renderer-facing API (src/shared/api.ts) on top of the Library and background jobs.
 
-import { app, dialog, shell, type BrowserWindow } from 'electron'
+import { app, dialog, net, shell, type BrowserWindow } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
-import { openDb } from './db'
+import { getPhotos, openDb } from './db'
 import { Library } from './library'
 import { scanRoot } from './scanner'
 import { SORT_FIELDS } from './query'
@@ -12,6 +12,10 @@ import { createBackup, listBackups, mirroredRootPath, readBackup, restoreCatalog
 import type { Api } from '../shared/api'
 import type { Editor, JobProgress } from '../shared/types'
 import { Updater } from './updater'
+import { previewPaths } from './previews'
+import { MODEL, Tagger } from './tagging/tagger'
+import { tagsFor } from './tagging/rules'
+import { clearTags, hideTag, pendingTagIds, saveTagResults, tagCounts } from './tagging/store'
 import { TITLE_BAR } from './titlebar'
 
 export class AppContext {
@@ -25,6 +29,9 @@ export class AppContext {
   )
   /** Resolves when the catalog is usable; requests wait on it while a restore swaps the catalog file. */
   ready: Promise<void> = Promise.resolve()
+  readonly tagger = new Tagger(path.join(app.getPath('userData'), 'Models'), (url, init) => net.fetch(url, init))
+  private tagging: Promise<void> | null = null
+  private tagAgain = false
 
   constructor(
     readonly catalogPath: string,
@@ -84,8 +91,77 @@ export class AppContext {
           return r
         })
       }
+      void this.tagLibrary()
     })
     return this.scanQueue
+  }
+
+  cancelJobs(...kinds: JobProgress['kind'][]): void {
+    for (const [id, job] of this.jobs) if (kinds.includes(job.progress.kind)) this.cancelJob(id)
+  }
+
+  /** Downloads the smart tag model if it's missing, then tags whatever needs it. */
+  async startSmartTags(): Promise<void> {
+    if (!this.library.getSettings().smartTags.enabled) return
+    if (!this.tagger.installed()) {
+      if ([...this.jobs.values()].some((j) => j.progress.kind === 'model')) return
+      const mb = (n: number): string => `${Math.round(n / 1e6)}`
+      await this.runJob('model', 'Downloading the smart tag model', (report, signal) =>
+        this.tagger.download(signal, (bytes, total) => report(bytes, total, `${mb(bytes)} of ${mb(total)} MB`))
+      )
+    }
+    await this.tagLibrary()
+  }
+
+  /** Tags photos that are new or changed, one run at a time. Runs after scans, so new photos are tagged as they arrive. */
+  tagLibrary(): Promise<void> {
+    if (this.tagging) {
+      this.tagAgain = true
+      return this.tagging
+    }
+    this.tagging = (async () => {
+      do {
+        this.tagAgain = false
+        if (!this.library.getSettings().smartTags.enabled || !this.tagger.installed()) return
+        if (!pendingTagIds(this.library.db, MODEL.id, 1).length) return
+        await this.runJob('tags', 'Finding subjects in photos', async (report, signal) => {
+          const ids = pendingTagIds(this.library.db, MODEL.id)
+          let done = 0
+          let failed = 0
+          for (let i = 0; i < ids.length && !signal.aborted; i += 16) {
+            const db = this.library.db
+            const photos = getPhotos(db, ids.slice(i, i + 16))
+            const rows: Parameters<typeof saveTagResults>[2] = []
+            const embedAll = async (list: typeof photos): Promise<void> => {
+              const vecs = await this.tagger.embed(list.map((p) => previewPaths(this.cacheDir, p.id).thumb))
+              list.forEach((p, k) => rows.push({ id: p.id, mtime: p.mtime, embedding: vecs[k], tags: tagsFor(vecs[k]) }))
+            }
+            try {
+              await embedAll(photos)
+            } catch {
+              // One unreadable thumbnail shouldn't sink the batch: retry one by one.
+              for (const p of photos) await embedAll([p]).catch(() => failed++)
+            }
+            saveTagResults(db, MODEL.id, rows)
+            done += photos.length
+            report(done, ids.length, `${done.toLocaleString()} of ${ids.length.toLocaleString()} photos`)
+            if (i % 320 === 0) this.emit('library-changed')
+            await new Promise((r) => setImmediate(r))
+          }
+          report(ids.length, ids.length, `${(done - failed).toLocaleString()} photos tagged${failed ? `, ${failed} couldn't be read` : ''}`)
+        })
+      } while (this.tagAgain)
+    })().finally(() => (this.tagging = null))
+    return this.tagging
+  }
+
+  async removeSmartTags(): Promise<void> {
+    this.library.setSettings({ smartTags: { enabled: false } })
+    this.cancelJobs('model', 'tags')
+    await this.tagging
+    this.tagger.remove()
+    clearTags(this.library.db)
+    this.emit('library-changed')
   }
 
   async backup(): Promise<void> {
@@ -128,8 +204,9 @@ export class AppContext {
       this.ready = new Promise((r) => (reopen = r))
       try {
         // Stop scans that would write to the old catalog, then swap the file.
-        for (const [id, job] of this.jobs) if (job.progress.kind === 'scan') this.cancelJob(id)
+        this.cancelJobs('scan', 'tags')
         await this.scanQueue
+        await this.tagging
         this.library.db.close()
         try {
           await restoreCatalogFile(backupPath, this.catalogPath, rootMap)
@@ -303,6 +380,23 @@ export function createApi(ctx: AppContext): Api {
     setTitleBarTheme: (theme) => {
       if (process.platform === 'darwin' || !ctx.window || ctx.window.isDestroyed()) return
       ctx.window.setTitleBarOverlay({ ...TITLE_BAR[theme], height: TITLE_BAR.height })
-    }
+    },
+
+    smartTagStatus: () => ({
+      enabled: lib().getSettings().smartTags.enabled,
+      installed: ctx.tagger.installed(),
+      modelSize: MODEL.size,
+      ...tagCounts(lib().db, MODEL.id)
+    }),
+    enableSmartTags: () => {
+      lib().setSettings({ smartTags: { enabled: true } })
+      void ctx.startSmartTags()
+    },
+    disableSmartTags: () => {
+      lib().setSettings({ smartTags: { enabled: false } })
+      ctx.cancelJobs('model', 'tags')
+    },
+    removeSmartTags: () => void ctx.removeSmartTags(),
+    hideSmartTag: (photoId, tag) => hideTag(lib().db, photoId, tag)
   }
 }

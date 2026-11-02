@@ -98,6 +98,24 @@ CREATE TABLE IF NOT EXISTS smart_albums (
   sort_dir TEXT NOT NULL
 );
 
+-- Smart tags found on this computer by the CLIP model. Hidden tags were removed by the user and are never re-added.
+CREATE TABLE IF NOT EXISTS photo_tags (
+  photo_id INTEGER NOT NULL REFERENCES photos(id) ON DELETE CASCADE,
+  tag TEXT NOT NULL COLLATE NOCASE,
+  grp TEXT NOT NULL,
+  score REAL NOT NULL,
+  hidden INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (photo_id, tag)
+);
+CREATE INDEX IF NOT EXISTS photo_tags_tag ON photo_tags(tag);
+-- One int8 CLIP embedding a photo, with the model and file version it came from.
+CREATE TABLE IF NOT EXISTS photo_embeddings (
+  photo_id INTEGER PRIMARY KEY REFERENCES photos(id) ON DELETE CASCADE,
+  model TEXT NOT NULL,
+  mtime INTEGER NOT NULL,
+  vec BLOB NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
@@ -221,7 +239,7 @@ export function getKeywords(db: Db, photoId: number): string[] {
   ).map((r) => r.path)
 }
 
-/** Rebuilds the full-text row for a photo from its columns, keywords and metadata values. */
+/** Rebuilds the full-text row for a photo from its columns, keywords, smart tags and metadata values. */
 export function reindexFts(db: Db, photoId: number): void {
   const p = db
     .prepare(
@@ -238,6 +256,8 @@ export function reindexFts(db: Db, photoId: number): void {
     .prepare('SELECT a.name FROM album_photos ap JOIN albums a ON a.id = ap.album_id WHERE ap.photo_id = ?')
     .all(photoId) as { name: string }[]
   parts.push(...albums.map((a) => a.name))
+  const tags = db.prepare('SELECT tag FROM photo_tags WHERE photo_id = ? AND hidden = 0').all(photoId) as { tag: string }[]
+  parts.push(...tags.map((t) => t.tag))
   const meta = db.prepare('SELECT value FROM metadata WHERE photo_id = ? AND num IS NULL').all(photoId) as { value: string }[]
   for (const m of meta) if (m.value.length <= 200) parts.push(m.value)
   db.prepare('INSERT INTO photos_fts (rowid, body) VALUES (?, ?)').run(photoId, parts.join(' \n '))

@@ -125,6 +125,7 @@ export const FIELDS: Record<string, FieldDef> = {
   orientation: { kind: 'special' },
   keyword: { kind: 'special' },
   tag: { kind: 'special' },
+  auto: { kind: 'special' },
   album: { kind: 'special' },
   date: { kind: 'special' },
   has: { kind: 'special' },
@@ -142,6 +143,7 @@ export const FIELD_HELP: Record<string, string> = {
   flag: 'pick, reject or none',
   label: 'red, yellow, green, blue, purple or none',
   keyword: 'Keyword (hierarchical)',
+  auto: 'Smart tag found on this computer, e.g. auto:dog',
   album: 'Album name',
   folder: 'Folder path',
   date: 'Date taken: 2023, 2023-05, 2023-05-14 or ranges',
@@ -255,6 +257,11 @@ function buildTerm(t: Term): Built | string {
       const params = t.op === '=' ? [t.value, `${t.value.replace(/[\\%_]/g, (c) => '\\' + c)}>%`] : [like(t.value)]
       return { sql: `p.id IN (SELECT pk.photo_id FROM photo_keywords pk JOIN keywords k ON k.id = pk.keyword_id WHERE ${cond})`, params }
     }
+    case 'auto':
+      return {
+        sql: `p.id IN (SELECT photo_id FROM photo_tags WHERE hidden = 0 AND ${t.op === '=' ? 'tag = ?' : `tag ${LIKE}`})`,
+        params: [t.op === '=' ? t.value : like(t.value)]
+      }
     case 'album':
       return {
         sql: `p.id IN (SELECT ap.photo_id FROM album_photos ap JOIN albums a ON a.id = ap.album_id WHERE ${t.op === '=' ? 'a.name = ? COLLATE NOCASE' : `a.name ${LIKE}`})`,
@@ -540,6 +547,12 @@ export function suggest(db: Db, input: string): Suggestion[] {
     return mk(
       db
         .prepare(`SELECT k.path AS v, COUNT(*) AS c FROM keywords k JOIN photo_keywords pk ON pk.keyword_id = k.id WHERE k.path LIKE ? ESCAPE '\\' GROUP BY k.id ORDER BY c DESC LIMIT 12`)
+        .all(likeTyped) as { v: string; c: number }[]
+    )
+  if (key === 'auto')
+    return mk(
+      db
+        .prepare(`SELECT tag AS v, COUNT(*) AS c FROM photo_tags WHERE hidden = 0 AND tag LIKE ? ESCAPE '\\' GROUP BY tag ORDER BY c DESC LIMIT 12`)
         .all(likeTyped) as { v: string; c: number }[]
     )
   if (key === 'album')

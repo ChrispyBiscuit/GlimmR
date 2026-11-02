@@ -1,0 +1,63 @@
+# Publishes the smart tag model (src/main/tagging/model.json) as an asset of a pre-release, which installed apps
+# download when smart tags are turned on. The model is rebuilt from the original CLIP export with pinned tools and
+# must match the SHA-256 the app checks. Pre-releases are invisible to auto-update, which only follows full releases.
+# Runs when the model definition changes; does nothing if the asset is already published.
+
+name: Models
+
+on:
+  push:
+    branches: [main, 'claude/**']
+    paths: ['src/main/tagging/model.json', 'scripts/quantize-clip.py', '.github/workflows/models.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: models
+
+jobs:
+  publish:
+    name: Publish the smart tag model
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read the model definition
+        id: model
+        run: |
+          M=src/main/tagging/model.json
+          echo "tag=$(jq -r .release $M)" >> "$GITHUB_OUTPUT"
+          echo "file=$(jq -r .file $M)" >> "$GITHUB_OUTPUT"
+          echo "sha256=$(jq -r .sha256 $M)" >> "$GITHUB_OUTPUT"
+          echo "source=$(jq -r .source.url $M)" >> "$GITHUB_OUTPUT"
+          echo "source_sha256=$(jq -r .source.sha256 $M)" >> "$GITHUB_OUTPUT"
+          if gh release view "$(jq -r .release $M)" --json assets --jq '.assets[].name' 2>/dev/null | grep -qx "$(jq -r .file $M)"; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.model.outputs.published != 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Build the model
+        if: steps.model.outputs.published != 'true'
+        env:
+          FILE: ${{ steps.model.outputs.file }}
+        run: |
+          pip install onnxruntime==1.23.2 onnx==1.23.2 numpy==2.5.4 protobuf==7.36.2 ml_dtypes==0.6.0
+          curl -fsSL --retry 3 -o visual.onnx "${{ steps.model.outputs.source }}"
+          echo "${{ steps.model.outputs.source_sha256 }}  visual.onnx" | sha256sum -c
+          python scripts/quantize-clip.py visual.onnx "$FILE"
+          echo "${{ steps.model.outputs.sha256 }}  $FILE" | sha256sum -c
+      - name: Publish
+        if: steps.model.outputs.published != 'true'
+        env:
+          TAG: ${{ steps.model.outputs.tag }}
+          FILE: ${{ steps.model.outputs.file }}
+        run: |
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --prerelease --latest=false --target "$GITHUB_SHA" \
+            --title "Smart tag model ($TAG)" \
+            --notes "Downloaded by Glimmr when smart tags are turned on; not an app release. OpenAI CLIP ViT-B/32 image encoder (MIT licence), ONNX export from Jina AI's clip-as-service, with 8-bit weight-only quantization (scripts/quantize-clip.py). SHA-256 ${{ steps.model.outputs.sha256 }}."
+          gh release upload "$TAG" "$FILE" --clobber
