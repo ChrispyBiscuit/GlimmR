@@ -145,7 +145,8 @@ Electron main (Node)                                    Renderer (React + shadcn
 | `Ctrl/⌘ E` | Open in editor |
 | `S` | Slideshow |
 | `I` | Info panel (viewer) |
-| `Z` / `Space` / click | Zoom to 100% (viewer) |
+| `Z` / `Space` / click | Toggle fit and 100% (viewer) |
+| Scroll wheel / `+` / `−` | Zoom in and out around the pointer; drag to move a zoomed photo (viewer) |
 | `Ctrl/⌘ A`, `Esc` | Select all, clear / back |
 
 ## Performance

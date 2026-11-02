@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, Flag, FolderOpen, Info, Pause, Pencil, Play, X } from 'lucide-react'
+import { ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, Flag, FolderOpen, Info, Pause, Pencil, Play, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
+import { Slider } from '@/components/ui/slider'
 import { Textarea } from '@/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
@@ -10,6 +11,7 @@ import { useStore } from '../store'
 import { api, originalUrl, previewUrl, thumbUrl } from '../api'
 import { camera, exposureParts, fmtBytes, fmtDate, fmtShutter, LABEL_COLORS, quoteValue } from '../format'
 import { cullingUpdate, isTyping } from '../culling'
+import { clampView, fitScale, fromSlider, MAX_SCALE, toSlider, zoomAt, type Box, type View } from '../zoom'
 import { KeywordEditor } from './KeywordEditor'
 import { StarRating } from './SelectionBar'
 import { COLOR_LABELS } from '../../../shared/types'
@@ -17,6 +19,9 @@ import type { PhotoDetail } from '../../../shared/types'
 
 const BROWSER_EXTS = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'bmp'])
 const mac = navigator.userAgent.includes('Mac')
+// Space kept clear around a fitted photo for the header (top) and the filmstrip (bottom).
+const FIT_PAD = { x: 24, top: 64, bottom: 96 }
+const ZOOM_STEP = 1.5
 
 // Raw metadata keys shown in each info group (the rest appear under "All fields").
 const GROUPS: { title: string; keys: string[] }[] = [
@@ -58,13 +63,17 @@ export function Viewer() {
   const photo = s.cache.get(id)
   const [detail, setDetail] = useState<PhotoDetail | null>(null)
   const [showInfo, setShowInfo] = useState(true)
-  const [zoom, setZoom] = useState(false)
+  const [view, setView] = useState<View | null>(null) // null means fitted to the window
+  const [dims, setDims] = useState<(Box & { id: number }) | null>(null)
+  const [stageBox, setStageBox] = useState<Box>({ w: 0, h: 0 })
+  const [animate, setAnimate] = useState(false)
+  const [dragging, setDragging] = useState(false)
   const [hiRes, setHiRes] = useState(false)
   const [idle, setIdle] = useState(false)
   const [metaFilter, setMetaFilter] = useState('')
   const stage = useRef<HTMLDivElement>(null)
   const strip = useRef<HTMLDivElement>(null)
-  const drag = useRef<{ x: number; y: number; sl: number; st: number; moved: boolean } | null>(null)
+  const drag = useRef<{ px: number; py: number; x: number; y: number; moved: boolean } | null>(null)
   const idleTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   const go = (delta: number): void => {
@@ -102,7 +111,7 @@ export function Viewer() {
   // Show the fast preview first, then swap in the original when the browser can display it.
   useEffect(() => {
     setHiRes(false)
-    setZoom(false)
+    setView(null)
     if (!photo || !BROWSER_EXTS.has(photo.ext) || photo.offline) return
     const img = new Image()
     img.onload = () => setHiRes(true)
@@ -112,6 +121,58 @@ export function Viewer() {
       img.onload = null
     }
   }, [photo?.id, photo?.mtime, photo?.ext, photo?.offline, v.ids, v.index])
+
+  useEffect(() => {
+    const el = stage.current
+    if (!el) return
+    const ro = new ResizeObserver(([e]) => setStageBox({ w: e.contentRect.width, h: e.contentRect.height }))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  // Images are laid out at the original's pixel size (so 100% means real pixels, even while the smaller
+  // preview is showing) and scaled with a transform.
+  const img: Box = dims && dims.id === photo?.id ? dims : { w: 0, h: 0 }
+  const ready = img.w > 0 && stageBox.w > 0
+  const fit = fitScale(img, {
+    w: stageBox.w - FIT_PAD.x * 2,
+    h: stageBox.h - FIT_PAD.top - FIT_PAD.bottom
+  })
+  const ev = view ? clampView(view, img, stageBox) : { scale: fit, x: 0, y: (FIT_PAD.top - FIT_PAD.bottom) / 2 }
+  // The wheel listener and rapid events read the latest geometry from here rather than a stale render.
+  const live = useRef({ ev, fit, img, stageBox })
+  live.current = { ev, fit, img, stageBox }
+
+  /** Zooms to `scale` around a point given relative to the stage centre; at or below fit it snaps back to fit. */
+  const zoomTo = (scale: number, px = 0, py = 0, smooth = false): void => {
+    const g = live.current
+    if (!g.img.w) return
+    setAnimate(smooth)
+    const next = Math.min(MAX_SCALE, scale)
+    if (next <= g.fit * 1.001) {
+      g.ev = { scale: g.fit, x: 0, y: (FIT_PAD.top - FIT_PAD.bottom) / 2 }
+      return setView(null)
+    }
+    g.ev = zoomAt(g.ev, next, px, py, g.img, g.stageBox)
+    setView(g.ev)
+  }
+  const zoomIn = (): number => (fit < 1 ? 1 : fit * 2)
+  const fromCentre = (e: { clientX: number; clientY: number }): [number, number] => {
+    const r = stage.current!.getBoundingClientRect()
+    return [e.clientX - r.left - r.width / 2, e.clientY - r.top - r.height / 2]
+  }
+
+  useEffect(() => {
+    const el = stage.current
+    if (!el) return
+    const onWheel = (e: WheelEvent): void => {
+      e.preventDefault()
+      const lines = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? el.clientHeight : 1
+      zoomTo(live.current.ev.scale * Math.exp(-e.deltaY * lines * 0.0015), ...fromCentre(e))
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [])
 
   useEffect(() => {
     strip.current?.querySelector('[aria-current="true"]')?.scrollIntoView({ inline: 'center', block: 'nearest' })
@@ -126,6 +187,8 @@ export function Viewer() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (isTyping(e) || document.querySelector('[role="menu"]')) return
+      // The zoom slider uses the arrow keys itself.
+      if ((e.target as HTMLElement)?.closest?.('[role="slider"]') && /^(Arrow|Home|End|Page)/.test(e.key)) return
       const mod = e.metaKey || e.ctrlKey
       wake()
       if (e.key === 'Escape') return v.slideshow ? s.setViewer({ ...v, slideshow: false }) : close()
@@ -136,8 +199,10 @@ export function Viewer() {
       if (e.key.toLowerCase() === 'i' && !mod) return setShowInfo((x) => !x)
       if (e.key.toLowerCase() === 'z' || e.key === ' ') {
         e.preventDefault()
-        return setZoom((z) => !z)
+        return zoomTo(view ? 0 : zoomIn(), 0, 0, true)
       }
+      if (!mod && (e.key === '=' || e.key === '+')) return zoomTo(ev.scale * ZOOM_STEP, 0, 0, true)
+      if (!mod && e.key === '-') return zoomTo(ev.scale / ZOOM_STEP, 0, 0, true)
       if (e.key.toLowerCase() === 's' && !mod) return s.setViewer({ ...v, slideshow: !v.slideshow })
       if (mod && e.key.toLowerCase() === 'e') {
         e.preventDefault()
@@ -155,23 +220,14 @@ export function Viewer() {
   })
 
   const onImageClick = (e: React.MouseEvent<HTMLImageElement>): void => {
-    if (drag.current?.moved) {
-      drag.current = null
-      return
-    }
-    drag.current = null
-    const img = e.currentTarget
-    if (zoom) return setZoom(false)
-    const rect = img.getBoundingClientRect()
-    const rx = (e.clientX - rect.left) / rect.width
-    const ry = (e.clientY - rect.top) / rect.height
-    setZoom(true)
-    requestAnimationFrame(() => {
-      const el = stage.current
-      if (!el) return
-      el.scrollLeft = rx * img.naturalWidth - el.clientWidth / 2
-      el.scrollTop = ry * img.naturalHeight - el.clientHeight / 2
-    })
+    if (!view) zoomTo(zoomIn(), ...fromCentre(e), true)
+  }
+  const onImageLoad = (e: React.SyntheticEvent<HTMLImageElement>): void => {
+    const { naturalWidth: nw, naturalHeight: nh } = e.currentTarget
+    if (!photo || !nw || !nh) return
+    const full = Math.max(photo.width ?? 0, photo.height ?? 0)
+    const k = full > 0 ? full / Math.max(nw, nh) : 1
+    setDims((d) => (d && d.id === photo.id && Math.abs(d.w - nw * k) < 2 ? d : { id: photo.id, w: nw * k, h: nh * k }))
   }
 
   const src = photo ? (hiRes ? originalUrl(photo.id, photo.mtime) : previewUrl(photo.id, photo.mtime)) : undefined
@@ -183,7 +239,7 @@ export function Viewer() {
   }
   const meta = detail?.metadata ?? []
   const metaMap = new Map(meta.map((m) => [m.key, m.value]))
-  const chromeHidden = idle && !zoom
+  const chromeHidden = idle && !view
   const chrome = cn('transition-opacity duration-300', (chromeHidden || v.slideshow) && 'pointer-events-none opacity-0')
 
   return (
@@ -211,7 +267,17 @@ export function Viewer() {
               <StarRating value={photo.rating} onChange={(r) => void s.updatePhotos([id], { rating: r })} />
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon-sm" aria-label="Pick" aria-pressed={photo.flag === 'pick'} onClick={() => void s.updatePhotos([id], { flag: photo.flag === 'pick' ? null : 'pick' })}>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="Pick"
+                    aria-pressed={photo.flag === 'pick'}
+                    onClick={() =>
+                      void s.updatePhotos([id], {
+                        flag: photo.flag === 'pick' ? null : 'pick'
+                      })
+                    }
+                  >
                     <Flag className={cn(photo.flag === 'pick' && 'fill-pick text-pick')} />
                   </Button>
                 </TooltipTrigger>
@@ -219,7 +285,17 @@ export function Viewer() {
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon-sm" aria-label="Reject" aria-pressed={photo.flag === 'reject'} onClick={() => void s.updatePhotos([id], { flag: photo.flag === 'reject' ? null : 'reject' })}>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="Reject"
+                    aria-pressed={photo.flag === 'reject'}
+                    onClick={() =>
+                      void s.updatePhotos([id], {
+                        flag: photo.flag === 'reject' ? null : 'reject'
+                      })
+                    }
+                  >
                     <X className={cn(photo.flag === 'reject' && 'text-reject')} />
                   </Button>
                 </TooltipTrigger>
@@ -233,7 +309,11 @@ export function Viewer() {
                     role="radio"
                     aria-checked={photo.label === l}
                     aria-label={`${l} label`}
-                    onClick={() => void s.updatePhotos([id], { label: photo.label === l ? null : l })}
+                    onClick={() =>
+                      void s.updatePhotos([id], {
+                        label: photo.label === l ? null : l
+                      })
+                    }
                     className="flex size-6 items-center justify-center rounded-sm"
                   >
                     <span className={cn('size-3 rounded-full transition-opacity', photo.label === l ? 'opacity-100 ring-2 ring-ink ring-offset-1 ring-offset-black' : 'opacity-35 hover:opacity-80')} style={{ background: LABEL_COLORS[l] }} />
@@ -293,16 +373,44 @@ export function Viewer() {
 
         <div
           ref={stage}
-          className={cn('relative min-h-0 flex-1', zoom ? 'scroll-thin cursor-grab overflow-auto' : 'flex items-center justify-center overflow-hidden p-6 pt-16 pb-24')}
-          onMouseDown={(e) => {
-            if (zoom && stage.current) drag.current = { x: e.clientX, y: e.clientY, sl: stage.current.scrollLeft, st: stage.current.scrollTop, moved: false }
+          className={cn('relative min-h-0 flex-1 touch-none overflow-hidden', view && (dragging ? 'cursor-grabbing' : 'cursor-grab'))}
+          onPointerDown={(e) => {
+            if (!view || e.button !== 0) return
+            e.currentTarget.setPointerCapture(e.pointerId)
+            drag.current = {
+              px: e.clientX,
+              py: e.clientY,
+              x: ev.x,
+              y: ev.y,
+              moved: false
+            }
+            setAnimate(false)
+            setDragging(true)
           }}
-          onMouseMove={(e) => {
+          onPointerMove={(e) => {
             const d = drag.current
-            if (!d || !stage.current) return
-            if (Math.abs(e.clientX - d.x) + Math.abs(e.clientY - d.y) > 3) d.moved = true
-            stage.current.scrollLeft = d.sl - (e.clientX - d.x)
-            stage.current.scrollTop = d.st - (e.clientY - d.y)
+            if (!d) return
+            if (Math.abs(e.clientX - d.px) + Math.abs(e.clientY - d.py) > 3) d.moved = true
+            live.current.ev = clampView(
+              {
+                scale: ev.scale,
+                x: d.x + e.clientX - d.px,
+                y: d.y + e.clientY - d.py
+              },
+              img,
+              stageBox
+            )
+            setView(live.current.ev)
+          }}
+          onPointerUp={() => {
+            // A click without a drag while zoomed goes back to fit.
+            if (drag.current && !drag.current.moved) zoomTo(0, 0, 0, true)
+            drag.current = null
+            setDragging(false)
+          }}
+          onPointerCancel={() => {
+            drag.current = null
+            setDragging(false)
           }}
         >
           {src && (
@@ -312,18 +420,24 @@ export function Viewer() {
               alt={photo?.title || photo?.filename || ''}
               draggable={false}
               onClick={onImageClick}
-              className={cn('select-none', zoom ? 'max-w-none cursor-zoom-out' : 'max-h-full max-w-full cursor-zoom-in object-contain')}
+              onLoad={onImageLoad}
+              style={{
+                width: img.w || undefined,
+                height: img.h || undefined,
+                transform: `translate(-50%, -50%) translate(${ev.x}px, ${ev.y}px) scale(${ev.scale})`
+              }}
+              className={cn('absolute top-1/2 left-1/2 max-w-none select-none', !view && 'cursor-zoom-in', !ready && 'invisible', animate && !dragging && 'transition-transform duration-200 ease-out')}
             />
           )}
           {photo?.offline && <p className="absolute top-16 left-4 rounded-sm bg-reject/90 px-2 py-1 text-xs text-white">The original is offline. Showing the saved preview.</p>}
         </div>
 
-        {!zoom && v.index > 0 && (
+        {!view && v.index > 0 && (
           <Button variant="ghost" size="icon-lg" aria-label="Previous photo" className={cn('absolute top-1/2 left-3 -translate-y-1/2 rounded-full bg-black/40', chrome)} onClick={() => go(-1)}>
             <ChevronLeft />
           </Button>
         )}
-        {!zoom && v.index < v.ids.length - 1 && (
+        {!view && v.index < v.ids.length - 1 && (
           <Button variant="ghost" size="icon-lg" aria-label="Next photo" className={cn('absolute top-1/2 right-3 -translate-y-1/2 rounded-full bg-black/40', chrome)} onClick={() => go(1)}>
             <ChevronRight />
           </Button>
@@ -335,30 +449,65 @@ export function Viewer() {
           </Button>
         )}
 
-        <div ref={strip} className={cn('scroll-thin absolute inset-x-0 bottom-0 flex h-20 items-center gap-1 overflow-x-auto bg-gradient-to-t from-black/70 to-transparent px-3', chrome)}>
-          {v.ids.slice(Math.max(0, v.index - 30), v.index + 31).map((fid, k) => {
-            const idx = Math.max(0, v.index - 30) + k
-            const current = idx === v.index
-            return (
-              <button
-                key={fid}
-                type="button"
-                aria-label={`Photo ${idx + 1}`}
-                aria-current={current}
-                onClick={() => s.setViewer({ ...v, index: idx })}
-                className={cn('h-14 shrink-0 overflow-hidden rounded-sm transition-opacity', current ? 'opacity-100 ring-2 ring-ink' : 'opacity-50 hover:opacity-90')}
-              >
-                <img src={thumbUrl(fid, s.cache.get(fid)?.mtime ?? 0)} alt="" className="h-full w-auto" draggable={false} />
-              </button>
-            )
-          })}
+        <div className={cn('absolute inset-x-0 bottom-0 flex h-20 items-center gap-3 bg-gradient-to-t from-black/70 to-transparent pr-3', chrome)}>
+          <div ref={strip} className="scroll-thin flex h-full min-w-0 flex-1 items-center gap-1 overflow-x-auto px-3">
+            {v.ids.slice(Math.max(0, v.index - 30), v.index + 31).map((fid, k) => {
+              const idx = Math.max(0, v.index - 30) + k
+              const current = idx === v.index
+              return (
+                <button
+                  key={fid}
+                  type="button"
+                  aria-label={`Photo ${idx + 1}`}
+                  aria-current={current}
+                  onClick={() => s.setViewer({ ...v, index: idx })}
+                  className={cn('h-14 shrink-0 overflow-hidden rounded-sm transition-opacity', current ? 'opacity-100 ring-2 ring-ink' : 'opacity-50 hover:opacity-90')}
+                >
+                  <img src={thumbUrl(fid, s.cache.get(fid)?.mtime ?? 0)} alt="" className="h-full w-auto" draggable={false} />
+                </button>
+              )
+            })}
+          </div>
+          <div className="flex shrink-0 items-center gap-1 rounded-full bg-black/55 px-1.5 py-1 backdrop-blur-sm">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon-sm" className="rounded-full" aria-label="Zoom out" disabled={!view} onClick={() => zoomTo(ev.scale / ZOOM_STEP, 0, 0, true)}>
+                  <ZoomOut />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Zoom out (−)</TooltipContent>
+            </Tooltip>
+            <Slider aria-label="Zoom" className="w-28" min={0} max={100} step={0.5} disabled={!ready} value={[toSlider(ev.scale, fit)]} onValueChange={([p]) => zoomTo(fromSlider(p, fit))} />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon-sm" className="rounded-full" aria-label="Zoom in" disabled={!ready || ev.scale >= MAX_SCALE} onClick={() => zoomTo(ev.scale * ZOOM_STEP, 0, 0, true)}>
+                  <ZoomIn />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Zoom in (+)</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="sm" className="tnum w-14 rounded-full px-0 text-xs" disabled={!ready} onClick={() => zoomTo(view ? 0 : zoomIn(), 0, 0, true)}>
+                  {view ? `${Math.round(ev.scale * 100)}%` : 'Fit'}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{view ? 'Fit to window (Z)' : 'Zoom to 100% (Z)'}</TooltipContent>
+            </Tooltip>
+          </div>
         </div>
       </div>
 
       {showInfo && !v.slideshow && detail && (
         <aside aria-label="Photo info" className={cn('scroll-thin w-[340px] shrink-0 overflow-y-auto border-l border-white/10 bg-panel px-5 py-5', !mac && 'pt-16')}>
           <h2 className="display text-[19px] leading-tight text-pretty">{fmtDate(detail.takenAt, { dateStyle: 'long' })}</h2>
-          <p className="tnum mt-1 text-[13px] text-ink-muted">{fmtDate(detail.takenAt, { weekday: 'long', hour: 'numeric', minute: '2-digit' })}</p>
+          <p className="tnum mt-1 text-[13px] text-ink-muted">
+            {fmtDate(detail.takenAt, {
+              weekday: 'long',
+              hour: 'numeric',
+              minute: '2-digit'
+            })}
+          </p>
           {exposureParts(detail).length > 0 && (
             <p className="tnum mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[13px]">
               {exposureParts(detail).map((p) => (

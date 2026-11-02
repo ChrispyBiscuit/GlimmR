@@ -144,7 +144,7 @@ Priority: **P0** = v1.0 MVP (built now), **P1** = v1.1, **P2** = later.
 | VIEW-1 | Virtualized grid that scrolls smoothly through 100k+ items; thumbnail size slider. | P0 |
 | VIEW-2 | Tile hover shows filename, date, camera/exposure summary, rating, label; quick actions: rate, pick, open in editor. | P0 |
 | VIEW-3 | Selection: click, Ctrl/Cmd-click, Shift-click range, Ctrl/Cmd+A; batch actions bar for the selection. | P0 |
-| VIEW-4 | Loupe viewer: full window, ← → navigation, filmstrip, fit / 100% zoom with pan, info panel toggle (`I`). | P0 |
+| VIEW-4 | Loupe viewer: full window, ← → navigation, filmstrip, fit / 100% zoom, scroll-wheel and slider zoom up to 400%, drag to pan, info panel toggle (`I`). | P0 |
 | VIEW-5 | Keyboard culling everywhere: `0–5` rating, `P` pick, `X` reject, `U` unflag, `6–9` color labels, `Caps Lock`-style **auto-advance** toggle. | P0 |
 | VIEW-6 | Slideshow (`S`) for the current results. | P0 |
 | VIEW-7 | Group grid by day/month/year with sticky headers. | P1 |
