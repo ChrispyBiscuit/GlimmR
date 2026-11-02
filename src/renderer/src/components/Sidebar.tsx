@@ -14,8 +14,6 @@ import { fmtNum } from '../format'
 import type { FolderNode, KeywordNode, Scope } from '../../../shared/types'
 import { UpdateNotice } from './UpdateNotice'
 
-const mac = navigator.userAgent.includes('Mac')
-
 const sameScope = (a: Scope, b: Scope): boolean => JSON.stringify(a) === JSON.stringify(b)
 
 function NavItem({ icon, label, count, active, onClick, inset = 10 }: { icon?: ReactNode; label: string; count?: number; active?: boolean; onClick: () => void; inset?: number }) {
@@ -140,12 +138,7 @@ export function Sidebar({ onAddFolder }: { onAddFolder: () => void }) {
 
   return (
     <aside className="flex min-h-0 flex-col border-r bg-panel" aria-label="Library">
-      <div className={cn('app-drag flex h-12 shrink-0 items-center justify-center border-b px-4', mac && 'h-16 items-end pb-3')}>
-        <span className="brand text-[19px] leading-none" aria-label="GLMR">
-          GLMR
-        </span>
-      </div>
-      <nav className="scroll-thin min-h-0 flex-1 overflow-y-auto px-2 pb-4">
+      <nav className="scroll-thin min-h-0 flex-1 overflow-y-auto px-2 pt-4 pb-4">
         <div className="flex flex-col gap-px">
           <NavItem icon={<Sparkles />} label="Rediscover" active={s.view === 'rediscover'} onClick={() => s.navigate('rediscover')} />
           <NavItem icon={<Images />} label="Photos" active={is({ type: 'all' })} onClick={() => s.navigate({ type: 'all' }, 'Photos')} />

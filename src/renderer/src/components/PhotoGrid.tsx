@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuShortcut, ContextMenuSub, ContextMenuSubContent, ContextMenuSubTrigger, ContextMenuTrigger } from '@/components/ui/context-menu'
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
@@ -20,7 +20,7 @@ export function PhotoGrid() {
   const [width, setWidth] = useState(0)
   const anchor = useRef(-1)
   const [menuId, setMenuId] = useState<number | null>(null)
-  const target = s.settings?.thumbSize ?? 220
+  const target = s.thumbSize
   const groupByMonth = ['default', 'taken'].includes(s.sort.field) && s.scope.type !== 'smart'
 
   // The scroller only mounts once there are results, so measure it through a callback ref.
@@ -41,6 +41,49 @@ export function PhotoGrid() {
     rows.forEach((r, ri) => r.kind === 'row' && r.items.forEach((it) => (m[it.index] = ri)))
     return m
   }, [rows, s.ids.length])
+
+  // Row tops computed here rather than read from the virtualizer, which catches up a frame later; resizing then
+  // stays smooth and can keep the photo under the pointer in place.
+  const offsets = useMemo(() => {
+    const o = new Float64Array(rows.length + 1)
+    rows.forEach((r, i) => (o[i + 1] = o[i] + r.height + (r.kind === 'row' ? GAP : 0)))
+    return o
+  }, [rows])
+
+  // Ctrl/Cmd + wheel (and trackpad pinch, which arrives as Ctrl + wheel) resizes photos smoothly.
+  const size = useRef(target)
+  size.current = target
+  const anchor$ = useRef<{ index: number; frac: number; y: number } | { ratio: number; y: number } | null>(null)
+  const live = useRef({ ids: s.ids, setThumbSize: s.setThumbSize, total: 0 })
+  live.current = { ids: s.ids, setThumbSize: s.setThumbSize, total: offsets[rows.length] }
+  useEffect(() => {
+    if (!scrollEl) return
+    const onWheel = (e: WheelEvent): void => {
+      if (!e.ctrlKey && !e.metaKey) return
+      e.preventDefault()
+      const y = e.clientY - scrollEl.getBoundingClientRect().top
+      const tile = (e.target as HTMLElement).closest<HTMLElement>('[data-id]')
+      const index = tile ? live.current.ids.indexOf(Number(tile.dataset.id)) : -1
+      if (tile && index >= 0) {
+        const t = tile.getBoundingClientRect()
+        anchor$.current = { index, frac: (e.clientY - t.top) / t.height, y }
+      } else anchor$.current = { ratio: (scrollEl.scrollTop + y) / Math.max(1, live.current.total), y }
+      const lines = e.deltaMode === 1 ? 16 : 1
+      size.current = Math.min(420, Math.max(120, size.current * Math.exp(-e.deltaY * lines * 0.0015)))
+      live.current.setThumbSize(size.current)
+    }
+    scrollEl.addEventListener('wheel', onWheel, { passive: false })
+    return () => scrollEl.removeEventListener('wheel', onWheel)
+  }, [scrollEl])
+  useLayoutEffect(() => {
+    const a = anchor$.current
+    if (!a || !scrollEl) return
+    anchor$.current = null
+    if ('index' in a) {
+      const ri = rowOf[a.index]
+      scrollEl.scrollTop = offsets[ri] + a.frac * rows[ri].height - a.y
+    } else scrollEl.scrollTop = a.ratio * offsets[rows.length] - a.y
+  }, [offsets, rows, rowOf, scrollEl])
 
   const virtual = useVirtualizer({
     count: rows.length,
@@ -209,11 +252,11 @@ export function PhotoGrid() {
               }
             }}
           >
-            <div className="relative" style={{ height: virtual.getTotalSize() + 120 }}>
+            <div className="relative" style={{ height: offsets[rows.length] + 120 }}>
               {items.map((vi) => {
                 const row = rows[vi.index]
                 return (
-                  <div key={vi.key} className="absolute left-0 w-full" style={{ top: vi.start, paddingLeft: PAD, paddingRight: PAD }}>
+                  <div key={vi.key} className="absolute left-0 w-full" style={{ top: offsets[vi.index], paddingLeft: PAD, paddingRight: PAD }}>
                     {row.kind === 'header' ? (
                       <div className="flex h-16 items-end justify-between pb-3">
                         <h2 className="display text-[19px] leading-none">{row.label}</h2>

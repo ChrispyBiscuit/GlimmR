@@ -12,7 +12,7 @@ import { TITLE_BAR } from './titlebar'
 protocol.registerSchemesAsPrivileged([{ scheme: 'glimmr', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }])
 
 // A separate data folder (portable installs, testing).
-// The library stays in the folder it had before the app was renamed GLMR, so existing catalogs carry over.
+// The data folder is pinned to "Glimmr" so a change of product name never moves the library.
 app.setPath('userData', process.env.GLIMMR_USER_DATA ?? path.join(app.getPath('appData'), 'Glimmr'))
 
 if (!app.requestSingleInstanceLock()) app.quit()
@@ -59,12 +59,12 @@ function createWindow(): void {
     minWidth: 960,
     minHeight: 600,
     show: false,
-    title: 'GLMR',
+    title: 'Glimmr',
     backgroundColor: TITLE_BAR.dark.color,
-    // The app draws its own top bar. macOS keeps its traffic lights inset; Windows and Linux keep their
-    // native window buttons as an overlay (so Snap Layouts still work), recoloured to match the theme.
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
-    ...(process.platform === 'darwin' ? {} : { titleBarOverlay: { ...TITLE_BAR.dark, height: TITLE_BAR.height } }),
+    // The app draws its own top bar. macOS keeps its traffic lights, centred in that bar; Windows and Linux keep
+    // their native window buttons as an overlay (so Snap Layouts still work), recoloured to match the theme.
+    titleBarStyle: 'hidden',
+    ...(process.platform === 'darwin' ? { trafficLightPosition: { x: 18, y: 17 } } : { titleBarOverlay: { ...TITLE_BAR.dark, height: TITLE_BAR.height } }),
     autoHideMenuBar: process.platform !== 'darwin',
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),

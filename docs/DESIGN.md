@@ -1,4 +1,4 @@
-# GLMR: UI Design
+# Glimmr: UI Design
 
 This document replaces the first Ant Design UI. The renderer is now **shadcn/ui (Radix) + Tailwind CSS v4**, chosen
 because its components live in the repository as source and the look can be fully custom. It follows the practices used by current agent UI standards:
@@ -56,30 +56,29 @@ the way a loupe or china marker circles a frame on a contact sheet.
 
 ### Type
 
-The wordmark sets the voice and everything else is tuned to it.
+There is no wordmark in the window: the photos are the brand, and the top bar is given to search.
 
-- **Rubik Mono One** (SIL Open Font License) is used for the **GLMR wordmark only**, always in caps. It was
-  chosen as an open-licence stand-in for Akira Expanded, the requested look: wide, heavy, flat terminals and
-  rounded-square geometry. Because it's OFL, it's bundled with the app and committed to the repo.
-  The app icon is its "G", converted to an outline.
+- **Rubik Mono One** (SIL Open Font License) supplies the app icon's "G", converted to an outline. It was
+  chosen as an open-licence stand-in for Akira Expanded: wide, heavy, flat terminals and rounded-square geometry.
 - **Archivo** (variable, with width and weight axes, OFL) is used for everything else. Its width axis lets one family
-  echo the wordmark's wide proportions:
+  echo the icon's wide proportions:
   - **Display** (125% width, weight 600) for time and place: month headers ("October 2023"), Rediscover chapters,
-    and the date in the viewer. This is the one bold place after the logo.
+    and the date in the viewer. This is the one bold place in the interface.
   - **UI** (100% width, weights 400–600, 13 px base) for all functional text, with tabular figures for counts and
     exposure data.
-- Scale (px): 11 / 12 / 13 (UI base) / 17 (wordmark) / 19 (section display) / 26 (chapter display).
-  Sentence case everywhere except the wordmark.
+- Scale (px): 11 / 12 / 13 (UI base) / 19 (section display) / 26 (chapter display).
+  Sentence case everywhere.
 
 Pairing a super-wide display face with a neutral grotesk is a classic combination. Using one variable family at two
 widths, rather than two unrelated faces, keeps the system tight. The serif from the first plan was dropped: it
-argued with the wordmark's geometry.
+argued with the icon's geometry.
 
 ### Layout
 
 ```
 ┌──────────────┬───────────────────────────────────────────────────────────┐
-│ GLMR         │ [⌕ Search photos…                              Ctrl K ] ⚙ │
+│ ←  →         │ [⌕ Search photos…                    Ctrl K ]       ＋  ⚙ │ ← one top bar
+├──────────────┼───────────────────────────────────────────────────────────┤
 │              │ Date ▾  Rating ▾  Camera ▾  Lens ▾  Keywords ▾  More ▾  │ ← Artlist-style filter bar
 │ Rediscover   │ [ISO 1600–12800 ×] [X-T5 ×]   1,204 photos   Sort ▾  ▭▭ │
 │ Photos       ├───────────────────────────────────────────────────────┬───┤
@@ -123,7 +122,7 @@ Text is left-aligned throughout. Numbers use tabular figures.
 
 - *Is the palette a generated default?* No. Neutral grey is a functional requirement for judging photo colour, and
   the near-black and single-accent template is gone.
-- *Is the type default?* No. The wordmark matches the requested Akira Expanded look using Rubik Mono One. Archivo was chosen because its width
+- *Is the type default?* No. The icon's G matches the requested Akira Expanded look using Rubik Mono One. Archivo was chosen because its width
   axis can match it, and it has tabular figures for camera data.
 - *Are there template tells?* No all-caps eyebrows, no stat tiles, no middle-dot meta strings, no arrows appended to links,
   no cards on the canvas.

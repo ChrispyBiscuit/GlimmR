@@ -14,6 +14,8 @@ import { FilterBar } from './FilterBar'
 import { PhotoGrid } from './PhotoGrid'
 import { SelectionBar } from './SelectionBar'
 
+const mac = navigator.userAgent.includes('Mac')
+
 export function Browse() {
   const s = useStore()
   const [sortFields, setSortFields] = useState<{ value: string; label: string }[]>([])
@@ -104,9 +106,14 @@ export function Browse() {
             </TooltipTrigger>
             <TooltipContent>{s.sort.dir === 'desc' ? 'Descending' : 'Ascending'}</TooltipContent>
           </Tooltip>
-          <div className="flex w-28 items-center">
-            <Slider aria-label="Photo size" min={120} max={420} step={20} value={[s.settings?.thumbSize ?? 220]} onValueChange={([v]) => s.setSettings({ thumbSize: v })} />
-          </div>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex w-28 items-center">
+                <Slider aria-label="Photo size" min={120} max={420} step={1} value={[s.thumbSize]} onValueChange={([v]) => s.setThumbSize(v)} />
+              </div>
+            </TooltipTrigger>
+            <TooltipContent>Photo size ({mac ? '⌘' : 'Ctrl'} + scroll)</TooltipContent>
+          </Tooltip>
         </div>
         <FilterBar />
         {s.searchError && <p className="text-xs text-reject">{s.searchError}</p>}

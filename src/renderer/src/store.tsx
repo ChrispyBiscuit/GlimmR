@@ -18,6 +18,19 @@ import type {
 
 export type View = 'rediscover' | 'browse' | 'settings'
 
+/** A place in the app, for back and forward. */
+interface Place {
+  view: View
+  scope: Scope
+  title: string
+  query: string
+  sort: SortSpec
+  section: string
+}
+
+const samePlace = (a: Place, b: Place): boolean =>
+  a.view === b.view && JSON.stringify(a.scope) === JSON.stringify(b.scope) && a.query === b.query && (a.view !== 'settings' || a.section === b.section)
+
 export interface ViewerState {
   ids: number[]
   index: number
@@ -55,6 +68,11 @@ function useStoreValue() {
   const [editVersion, setEditVersion] = useState(0)
   const [settingsSection, setSettingsSection] = useState('library')
   const [previousView, setPreviousView] = useState<View>('rediscover')
+  // Photo size follows the slider or wheel at once; the setting is saved when it settles.
+  const [liveThumbSize, setLiveThumbSize] = useState<number | null>(null)
+  const thumbSaveTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const history = useRef<{ list: Place[]; index: number; restoring: boolean }>({ list: [], index: -1, restoring: false })
+  const [historyVersion, setHistoryVersion] = useState(0)
 
   const putPhotos = useCallback((list: Photo[]) => {
     for (const p of list) cache.current.set(p.id, p)
@@ -84,8 +102,6 @@ function useStoreValue() {
       if (p.finished) {
         // Jobs can change settings in the main process (e.g. last backup time).
         void api.getSettings().then(setSettingsState)
-    void api.updateStatus().then(setUpdate)
-    const offUpdate = bridge().onUpdate(setUpdate)
         if (p.error) toast.error(p.label, { description: p.error, duration: 8000 })
         else if (p.kind !== 'scan' || (p.message && !p.message.startsWith('0 new, 0 updated'))) toast.success(p.label, { description: p.message })
       }
@@ -189,11 +205,63 @@ function useStoreValue() {
     setView('browse')
   }, [])
 
+  // Record each place visited. Refining a search replaces the current step instead of adding one per keystroke.
+  useEffect(() => {
+    const h = history.current
+    const place: Place = { view, scope, title, query, sort, section: settingsSection }
+    if (h.restoring) {
+      h.restoring = false
+      return
+    }
+    const cur = h.list[h.index]
+    if (cur && samePlace(cur, place)) {
+      h.list[h.index] = place
+      return
+    }
+    const refining = cur && cur.view === 'browse' && place.view === 'browse' && JSON.stringify(cur.scope) === JSON.stringify(place.scope) && cur.query && place.query
+    h.list = h.list.slice(0, refining ? h.index : h.index + 1)
+    h.list.push(place)
+    h.index = h.list.length - 1
+    setHistoryVersion((v) => v + 1)
+  }, [view, scope, title, query, sort, settingsSection])
+
+  const goHistory = useCallback((delta: number) => {
+    const h = history.current
+    const place = h.list[h.index + delta]
+    if (!place) return
+    h.index += delta
+    h.restoring = true
+    if (place.view !== 'settings') setPreviousView(place.view)
+    setScopeState(place.scope)
+    setTitle(place.title)
+    setQuery(place.query)
+    setSort(place.sort)
+    setSettingsSection(place.section)
+    setView(place.view)
+    setHistoryVersion((v) => v + 1)
+  }, [])
+  const back = useCallback(() => goHistory(-1), [goHistory])
+  const forward = useCallback(() => goHistory(1), [goHistory])
+  const canBack = history.current.index > 0
+  const canForward = history.current.index < history.current.list.length - 1
+  void historyVersion
+
   const refreshResults = useCallback(() => setLibraryVersion((v) => v + 1), [])
 
   const setSettings = useCallback(async (patch: Partial<AppSettings>) => {
     setSettingsState(await api.setSettings(patch))
   }, [])
+
+  const thumbSize = liveThumbSize ?? settings?.thumbSize ?? 220
+  const setThumbSize = useCallback(
+    (size: number) => {
+      const next = Math.round(Math.min(420, Math.max(120, size)))
+      setLiveThumbSize(next)
+      clearTimeout(thumbSaveTimer.current)
+      thumbSaveTimer.current = setTimeout(() => void setSettings({ thumbSize: next }).then(() => setLiveThumbSize((v) => (v === next ? null : v))), 400)
+    },
+    [setSettings]
+  )
 
   /** Applies a catalog edit and refreshes the affected tiles. */
   const updatePhotos = useCallback(
@@ -267,7 +335,13 @@ function useStoreValue() {
     openEditor,
     settingsSection,
     openSettings,
-    closeSettings
+    closeSettings,
+    back,
+    forward,
+    canBack,
+    canForward,
+    thumbSize,
+    setThumbSize
   }
 }
 

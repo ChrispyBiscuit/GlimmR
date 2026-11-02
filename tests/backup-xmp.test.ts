@@ -66,13 +66,13 @@ describe('backup and restore', () => {
 })
 
 describe('renamed originals mirror', () => {
-  it('keeps using a mirror made before the app was renamed GLMR', () => {
+  it('keeps using a mirror made under an earlier app name', () => {
     const dest = tmpDir()
-    const legacy = path.join(dest, 'Glimmr Originals', '1-Photos')
+    const legacy = path.join(dest, 'GLMR Originals', '1-Photos')
     fs.mkdirSync(legacy, { recursive: true })
-    expect(originalsDir(dest)).toBe(path.join(dest, 'Glimmr Originals'))
-    expect(mirroredRootPath(path.join(dest, 'GLMR 2026-10-26 20-00-00.glimmr-backup'), { id: 1, name: 'Photos' })).toBe(legacy)
-    expect(originalsDir(tmpDir())).toMatch(/GLMR Originals$/)
+    expect(originalsDir(dest)).toBe(path.join(dest, 'GLMR Originals'))
+    expect(mirroredRootPath(path.join(dest, 'Glimmr 2026-10-26 20-00-00.glimmr-backup'), { id: 1, name: 'Photos' })).toBe(legacy)
+    expect(originalsDir(tmpDir())).toMatch(/Glimmr Originals$/)
   })
 })
 

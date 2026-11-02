@@ -1,8 +1,7 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
-/* Archivo's width axis (62–125%) lets headings echo the wide wordmark; Rubik Mono One is the wordmark itself (both OFL). */
+/* Archivo's width axis (62–125%) gives headings their wide proportions (OFL). */
 @import '@fontsource-variable/archivo/wdth.css';
-@import '@fontsource/rubik-mono-one/400.css';
 
 /* Neutral, zero-hue greys: tinted backgrounds shift how photo colour is perceived. See docs/DESIGN.md. */
 :root {
@@ -58,7 +57,6 @@
 
 @theme inline {
   --font-sans: 'Archivo Variable', 'Segoe UI', system-ui, sans-serif;
-  --font-brand: 'Rubik Mono One', 'Archivo Variable', 'Segoe UI', sans-serif;
   --color-canvas: var(--canvas);
   --color-panel: var(--panel);
   --color-raised: var(--raised);
@@ -148,14 +146,7 @@
     scrollbar-width: thin;
     scrollbar-color: var(--line) transparent;
   }
-  /* The wordmark: Rubik Mono One (a single heavy weight), always caps. */
-  .brand {
-    font-family: var(--font-brand);
-    font-weight: 400;
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
-  }
-  /* Display type for time and place: Archivo expanded, echoing the wordmark without shouting. */
+  /* Display type for time and place: Archivo expanded, echoing the icon's wide G without shouting. */
   .display {
     font-family: var(--font-sans);
     font-stretch: 125%;

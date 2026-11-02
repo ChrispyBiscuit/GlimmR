@@ -1,10 +1,10 @@
 {
   "name": "glimmr",
-  "productName": "GLMR",
+  "productName": "Glimmr",
   "version": "1.0.3",
   "description": "A calm, fast desktop library to store, organize, search and view your photos.",
   "main": "./out/main/index.js",
-  "author": "GLMR",
+  "author": "Glimmr",
   "license": "Apache-2.0",
   "private": true,
   "scripts": {

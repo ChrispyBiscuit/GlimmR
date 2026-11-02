@@ -9,9 +9,9 @@ import type { Db } from './db'
 import type { BackupEntry, BackupManifest } from '../shared/types'
 
 export const BACKUP_SUFFIX = '.glimmr-backup'
-export const ORIGINALS_DIR = 'GLMR Originals'
-/** Names the originals mirror had before the app was renamed GLMR; an existing one keeps being used. */
-const LEGACY_ORIGINALS_DIRS = ['Glimmr Originals', 'GlimmR Originals']
+export const ORIGINALS_DIR = 'Glimmr Originals'
+/** Names the originals mirror had under earlier app names; an existing one keeps being used. */
+const LEGACY_ORIGINALS_DIRS = ['GLMR Originals', 'GlimmR Originals']
 
 /** The originals mirror folder in a backup destination: an existing legacy-named one, or the current name. */
 export function originalsDir(destination: string): string {
@@ -64,7 +64,7 @@ export async function createBackup(db: Db, opts: BackupOptions): Promise<BackupE
   const check = db.prepare('PRAGMA integrity_check').get() as Record<string, string>
   if (Object.values(check)[0] !== 'ok') throw new Error('The catalog failed its integrity check; backup stopped so a damaged copy is not saved.')
 
-  const dir = path.join(opts.destination, `GLMR ${stamp()}${BACKUP_SUFFIX}`)
+  const dir = path.join(opts.destination, `Glimmr ${stamp()}${BACKUP_SUFFIX}`)
   const tmp = `${dir}.partial`
   await fs.promises.rm(tmp, { recursive: true, force: true })
   await fs.promises.mkdir(tmp, { recursive: true })
@@ -99,7 +99,7 @@ export async function createBackup(db: Db, opts: BackupOptions): Promise<BackupE
 }
 
 /**
- * Copies every cataloged original (and its XMP sidecar) into `<destination>/GLMR Originals/<root>/…`.
+ * Copies every cataloged original (and its XMP sidecar) into `<destination>/Glimmr Originals/<root>/…`.
  * Files already present with the same size and mtime are skipped; copies are verified by size and checksum.
  */
 async function mirrorOriginals(
