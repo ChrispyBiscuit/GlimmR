@@ -136,7 +136,7 @@ Priority: **P0** = v1.0 MVP (built now), **P1** = v1.1, **P2** = later.
 | SRCH-11 | Color search by dominant color. | P1 |
 | SRCH-12 | Map view (GPS photos on a map; draw to filter). | P1 |
 | SRCH-13 | Face detection and people. | P2 |
-| SRCH-14 | **Smart tags**: on-device recognition of subjects, places, events and styles (CLIP), opt-in with a one-time model download, searchable as free text or `auto:`; wrong tags can be removed. No photo leaves the computer. | P1 (shipped) |
+| SRCH-14 | **Smart tags**: on-device recognition (CLIP) with a layered vocabulary of ~800 tags: subjects from broad to specific (species, breeds, dishes, landmarks), places, activities, events, light, weather, season, composition, mood and colour; up to 8 per photo. Opt-in with a one-time model download, searchable as free text or `auto:`; wrong tags can be removed. No photo leaves the computer. | P1 (shipped) |
 
 ### 7.4 Browsing and viewing
 
@@ -169,6 +169,7 @@ Priority: **P0** = v1.0 MVP (built now), **P1** = v1.1, **P2** = later.
 | ORG-3 | Folders tree mirrors disk structure under each library root with counts. | P0 |
 | ORG-4 | Rename / delete albums, smart albums and keywords. | P0 |
 | ORG-5 | Move/rename files on disk from inside GlimmR. | P2 |
+| ORG-6 | Delete photos: `Delete`/`Backspace` or the context menu moves the selection (and sidecars only it uses) to the Recycle Bin / Trash after a confirmation, and removes it from the catalog. | P1 (shipped) |
 
 ### 7.7 Open in external editor
 

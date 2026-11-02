@@ -59,6 +59,7 @@ export class Tagger {
       await new Promise<void>((resolve, reject) => file.end((e?: Error | null) => (e ? reject(e) : resolve())))
       if (bytes !== MODEL.size || hash.digest('hex') !== MODEL.sha256) throw new Error('The downloaded model was incomplete or damaged. Try again.')
       fs.renameSync(part, this.modelPath)
+      this.removeOtherModels()
     } catch (e) {
       file.destroy()
       fs.rmSync(part, { force: true })
@@ -68,8 +69,12 @@ export class Tagger {
 
   remove(): void {
     this.session = null
-    fs.rmSync(this.modelPath, { force: true })
-    fs.rmSync(`${this.modelPath}.part`, { force: true })
+    fs.rmSync(this.modelDir, { recursive: true, force: true })
+  }
+
+  /** Deletes models from earlier versions of the app, which are replaced rather than kept. */
+  private removeOtherModels(): void {
+    for (const f of fs.readdirSync(this.modelDir)) if (f !== MODEL.file) fs.rmSync(path.join(this.modelDir, f), { force: true })
   }
 
   private load(): Promise<InferenceSession> {

@@ -3,14 +3,15 @@
 Each label's text embedding is the normalised mean of its prompts' embeddings (prompt ensembling). Only the
 image model ships with the app; the text model is needed here, once, whenever the vocabulary changes.
 
-Needs: Python 3.10+, `pip install onnxruntime numpy ftfy regex`, the CLIP ViT-B/32 text model as ONNX and
-OpenAI's BPE tokenizer (open_clip's tokenizer.py and bpe_simple_vocab_16e6.txt.gz):
+Needs: Python 3.10+, `pip install onnxruntime numpy regex`, the CLIP ViT-B/16 text model as ONNX (the text half of
+the image model in src/main/tagging/model.json) and OpenAI's BPE tokenizer (open_clip's tokenizer.py and bpe_simple_vocab_16e6.txt.gz):
 
   python scripts/build-clip-labels.py --text-model textual.onnx --tokenizer-dir path/to/open_clip
 """
 
 import argparse
 import base64
+import hashlib
 import gzip
 import html
 import json
@@ -86,6 +87,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--text-model', required=True)
     ap.add_argument('--tokenizer-dir', required=True, help='folder with bpe_simple_vocab_16e6.txt.gz')
+    ap.add_argument('--model-name', default='openai/clip-vit-base-patch16')
     ap.add_argument('--out', default=os.path.join(ROOT, 'src', 'main', 'tagging', 'clip-labels.json'))
     args = ap.parse_args()
 
@@ -103,13 +105,15 @@ def main():
         return base64.b64encode(np.asarray(v, dtype='<f4').tobytes()).decode()
 
     vocab = json.load(open(os.path.join(ROOT, 'scripts', 'clip-vocabulary.json')))
-    out = {'model': 'openai/clip-vit-base-patch32', 'dim': 512, 'groups': [], 'attributes': []}
+    out = {'model': args.model_name, 'dim': 512, 'maxTags': vocab.get('maxTags', 8), 'groups': [], 'attributes': []}
     for g in vocab['groups']:
         templates = vocab['templates'][g['template']]
         labels = [{'tag': l['tag'], 'embedding': b64(embed([t.format(l['text']) for t in templates]))} for l in g['labels']]
-        out['groups'].append({'id': g['id'], 'title': g['title'], 'threshold': g['threshold'], 'max': g['max'], 'labels': labels})
+        out['groups'].append({'id': g['id'], 'title': g['title'], 'threshold': g['threshold'], 'max': g['max'], 'parents': g.get('parents', []), 'look': g['template'] == 'look', 'labels': labels})
     for a in vocab['attributes']:
-        out['attributes'].append({'tag': a['tag'], 'threshold': a['threshold'], 'suppresses': a.get('suppresses', []), 'yes': b64(embed(a['yes'])), 'no': b64(embed(a['no']))})
+        out['attributes'].append({'tag': a['tag'], 'threshold': a['threshold'], 'suppresses': a.get('suppresses', []), 'parents': a.get('parents', []), 'yes': b64(embed(a['yes'])), 'no': b64(embed(a['no']))})
+    # Libraries re-score their stored embeddings when this changes.
+    out['version'] = hashlib.sha256(json.dumps(out, sort_keys=True).encode()).hexdigest()[:16]
     os.makedirs(os.path.dirname(args.out), exist_ok=True)
     with open(args.out, 'w') as f:
         json.dump(out, f, separators=(',', ':'))

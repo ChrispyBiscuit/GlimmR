@@ -7,6 +7,7 @@ import { getPhotos, openDb } from './db'
 import { Library } from './library'
 import { scanRoot } from './scanner'
 import { SORT_FIELDS } from './query'
+import { findSidecar } from './metadata'
 import { detectEditors, editorFor, launchEditor, mergeEditors } from './editors'
 import { createBackup, listBackups, mirroredRootPath, readBackup, restoreCatalogFile, verifyBackup } from './backup'
 import type { Api } from '../shared/api'
@@ -14,8 +15,8 @@ import type { Editor, JobProgress } from '../shared/types'
 import { Updater } from './updater'
 import { previewPaths } from './previews'
 import { MODEL, Tagger } from './tagging/tagger'
-import { tagsFor } from './tagging/rules'
-import { clearTags, hideTag, pendingTagIds, saveTagResults, tagCounts } from './tagging/store'
+import { tagsFor, VOCABULARY_VERSION } from './tagging/rules'
+import { appliedVocabulary, clearTags, embeddedIds, hideTag, pendingTagIds, retagFromEmbeddings, saveTagResults, setAppliedVocabulary, tagCounts } from './tagging/store'
 import { TITLE_BAR } from './titlebar'
 
 export class AppContext {
@@ -123,8 +124,21 @@ export class AppContext {
       do {
         this.tagAgain = false
         if (!this.library.getSettings().smartTags.enabled || !this.tagger.installed()) return
-        if (!pendingTagIds(this.library.db, MODEL.id, 1).length) return
+        const stale = appliedVocabulary(this.library.db) !== VOCABULARY_VERSION
+        if (!stale && !pendingTagIds(this.library.db, MODEL.id, 1).length) return
         await this.runJob('tags', 'Finding subjects in photos', async (report, signal) => {
+          if (stale) {
+            // A new vocabulary: re-score what's already analysed, which takes seconds rather than rerunning the model.
+            const tagged = embeddedIds(this.library.db, MODEL.id)
+            for (let i = 0; i < tagged.length && !signal.aborted; i += 200) {
+              retagFromEmbeddings(this.library.db, MODEL.id, tagged.slice(i, i + 200), tagsFor)
+              report(i, tagged.length, 'Updating smart tags…')
+              await new Promise((r) => setImmediate(r))
+            }
+            if (signal.aborted) return
+            setAppliedVocabulary(this.library.db, VOCABULARY_VERSION)
+            this.emit('library-changed')
+          }
           const ids = pendingTagIds(this.library.db, MODEL.id)
           let done = 0
           let failed = 0
@@ -380,6 +394,29 @@ export function createApi(ctx: AppContext): Api {
     setTitleBarTheme: (theme) => {
       if (process.platform === 'darwin' || !ctx.window || ctx.window.isDestroyed()) return
       ctx.window.setTitleBarOverlay({ ...TITLE_BAR[theme], height: TITLE_BAR.height })
+    },
+
+    trashPhotos: async (ids) => {
+      const photos = lib().photos(ids)
+      const removed: number[] = []
+      let error: string | undefined
+      for (const p of photos) {
+        try {
+          if (fs.existsSync(p.path)) await shell.trashItem(p.path)
+          // A sidecar named IMG_1.xmp can belong to IMG_1.CR2 and IMG_1.JPG alike; keep it while another file uses it.
+          const sidecar = findSidecar(p.path)
+          const base = path.basename(p.path, path.extname(p.path))
+          const shared = sidecar && path.basename(sidecar).toLowerCase() === `${base}.xmp`.toLowerCase() &&
+            fs.readdirSync(path.dirname(p.path)).some((f) => f.startsWith(`${base}.`) && !/\.xmp$/i.test(f) && f !== path.basename(p.path))
+          if (sidecar && !shared) await shell.trashItem(sidecar)
+          removed.push(p.id)
+        } catch (e) {
+          error ??= (e as Error).message
+        }
+      }
+      lib().removePhotos(removed)
+      ctx.emit('library-changed')
+      return { trashed: removed.length, failed: photos.length - removed.length, error }
     },
 
     smartTagStatus: () => ({

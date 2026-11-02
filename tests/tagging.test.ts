@@ -5,7 +5,7 @@ import { openDb } from '../src/main/db'
 import { Library } from '../src/main/library'
 import { scanRoot } from '../src/main/scanner'
 import { normalize, packEmbedding, tagsFor, unpackEmbedding } from '../src/main/tagging/rules'
-import { hideTag, pendingTagIds, photoTags, saveTagResults, tagCounts } from '../src/main/tagging/store'
+import { appliedVocabulary, embeddedIds, hideTag, pendingTagIds, photoTags, retagFromEmbeddings, saveTagResults, setAppliedVocabulary, tagCounts } from '../src/main/tagging/store'
 import { MODEL, Tagger } from '../src/main/tagging/tagger'
 import fixture from './fixtures-clip.json'
 import { makeJpeg, tmpDir } from './fixtures'
@@ -22,7 +22,10 @@ describe('smart tag rule', () => {
       const v = decode(p.embedding)
       const back = unpackEmbedding(packEmbedding(v))
       expect(back.reduce((s, x, i) => s + x * v[i], 0)).toBeGreaterThan(0.99)
-      expect(tagsFor(back).map((t) => t.tag)).toEqual(p.tags)
+      // Rounding can tip a borderline tag, but no more than one.
+      const got = tagsFor(back).map((t) => t.tag)
+      const changed = [...got.filter((t) => !p.tags.includes(t)), ...p.tags.filter((t) => !got.includes(t))]
+      expect(changed.length, p.photo).toBeLessThanOrEqual(1)
     }
   })
 })
@@ -57,14 +60,26 @@ describe('smart tag storage and search', () => {
     expect(find('drink')).toEqual(['coffee.jpg'])
     expect(find('-auto:drink')).toEqual(['cat.jpg'])
     expect(lib.suggest('auto:dr')[0]).toMatchObject({ value: 'auto:=drink', count: 1 })
-    expect(lib.detail(byName.get('cat.jpg')!.id)!.smartTags.map((t) => t.tag)).toEqual(['cat'])
+    const catTags = fixture.photos.find((p) => p.photo === 'chelsea.png')!.tags
+    expect(lib.detail(byName.get('cat.jpg')!.id)!.smartTags.map((t) => t.tag)).toEqual(catTags)
 
     // A hidden tag stays hidden when the photo is tagged again.
     hideTag(lib.db, byName.get('cat.jpg')!.id, 'cat')
-    expect(find('auto:cat')).toEqual([])
+    expect(find('auto:=cat')).toEqual([])
+    expect(find('auto:cat')).toEqual(['cat.jpg']) // auto: without = also matches 'tabby cat'
     saveTagResults(lib.db, MODEL.id, rows)
-    expect(photoTags(lib.db, byName.get('cat.jpg')!.id)).toEqual([])
+    expect(photoTags(lib.db, byName.get('cat.jpg')!.id).map((t) => t.tag)).toEqual(catTags.filter((t) => t !== 'cat'))
     expect(find('cat')).toEqual(['cat.jpg']) // still found by its file name
+
+    // A new vocabulary re-tags from stored embeddings, still keeping hidden tags hidden.
+    saveTagResults(lib.db, MODEL.id, rows.map((r) => ({ ...r, tags: [] })))
+    expect(find('drink')).toEqual([])
+    expect(appliedVocabulary(lib.db)).toBe(null)
+    retagFromEmbeddings(lib.db, MODEL.id, embeddedIds(lib.db, MODEL.id), tagsFor)
+    setAppliedVocabulary(lib.db, 'v2')
+    expect(appliedVocabulary(lib.db)).toBe('v2')
+    expect(find('drink')).toEqual(['coffee.jpg'])
+    expect(find('auto:=cat')).toEqual([])
 
     // An edited file is tagged again.
     lib.db.prepare('UPDATE photos SET mtime = mtime + 1 WHERE id = ?').run(byName.get('coffee.jpg')!.id)

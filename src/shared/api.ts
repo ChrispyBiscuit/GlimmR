@@ -97,6 +97,9 @@ export interface Api {
   /** Recolours the native window buttons (Windows/Linux) to match the app's top bar. */
   setTitleBarTheme(theme: 'dark' | 'light'): void
 
+  /** Moves photos (and sidecars only they use) to the system trash and removes them from the catalog. */
+  trashPhotos(ids: number[]): Promise<{ trashed: number; failed: number; error?: string }>
+
   // smart tags
   smartTagStatus(): SmartTagStatus
   /** Turns smart tags on, downloading the model first if needed, then tags the library in the background. */

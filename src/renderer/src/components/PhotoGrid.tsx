@@ -182,6 +182,10 @@ export function PhotoGrid() {
         return openViewer(f)
       }
       if (e.key === 'Escape') return s.setSelected(new Set())
+      if ((e.key === 'Delete' || e.key === 'Backspace') && s.targets.length) {
+        e.preventDefault()
+        return void s.trashPhotos(s.targets)
+      }
       if (mod && e.key.toLowerCase() === 'a') {
         e.preventDefault()
         return s.setSelected(new Set(s.ids))
@@ -260,7 +264,7 @@ export function PhotoGrid() {
                     {row.kind === 'header' ? (
                       <div className="flex h-16 items-end justify-between pb-3">
                         <h2 className="display text-[19px] leading-none">{row.label}</h2>
-                        <span className="tnum text-xs text-ink-muted">{fmtNum(row.count)} photos</span>
+                        <span className="tnum text-xs text-ink-muted">{row.count === 1 ? '1 photo' : `${fmtNum(row.count)} photos`}</span>
                       </div>
                     ) : (
                       <div className="flex" style={{ gap: GAP, height: row.height }}>
@@ -337,6 +341,10 @@ export function PhotoGrid() {
             </ContextMenuItem>
           )}
           <ContextMenuItem onSelect={() => void api.writeXmp(menuIds)}>Save Marks to XMP Sidecar</ContextMenuItem>
+          <ContextMenuSeparator />
+          <ContextMenuItem variant="destructive" onSelect={() => void s.trashPhotos(menuIds)}>
+            Move to {mac ? 'Trash' : 'Recycle Bin'}…<ContextMenuShortcut>{mac ? '⌫' : 'Del'}</ContextMenuShortcut>
+          </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
 

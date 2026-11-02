@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { api, bridge } from './api'
+import { confirmDialog } from './dialogs'
 import type {
   Album,
   AppSettings,
@@ -17,6 +18,8 @@ import type {
 } from '../../shared/types'
 
 export type View = 'rediscover' | 'browse' | 'settings'
+
+const BIN = navigator.userAgent.includes('Mac') ? 'Trash' : 'Recycle Bin'
 
 /** A place in the app, for back and forward. */
 interface Place {
@@ -288,6 +291,29 @@ function useStoreValue() {
     []
   )
 
+  /** Asks, then moves photos to the system trash. Resolves true when any were removed. */
+  const trashPhotos = useCallback(
+    async (targetIds: number[]): Promise<boolean> => {
+      const n = targetIds.length
+      if (!n) return false
+      const ok = await confirmDialog({
+        title: n === 1 ? `Move this photo to the ${BIN}?` : `Move ${n.toLocaleString()} photos to the ${BIN}?`,
+        description: `${n === 1 ? `The file is moved to the ${BIN}, with its XMP sidecar if it has one,` : `The files are moved to the ${BIN}, with any XMP sidecars,`} and removed from Glimmr. You can restore ${n === 1 ? 'it' : 'them'} from the ${BIN}.`,
+        confirmLabel: `Move to ${BIN}`,
+        destructive: true
+      })
+      if (!ok) return false
+      const r = await api.trashPhotos(targetIds)
+      if (r.failed) toast.error(`${r.failed === 1 ? 'A photo' : `${r.failed} photos`} couldn’t be moved to the ${BIN}`, { description: r.error })
+      else toast(`Moved ${r.trashed === 1 ? '1 photo' : `${r.trashed.toLocaleString()} photos`} to the ${BIN}`)
+      setSelected(new Set())
+      setLibraryVersion((v) => v + 1)
+      void refreshSidebar()
+      return r.trashed > 0
+    },
+    [refreshSidebar]
+  )
+
   /** Selected ids, or the focused photo when nothing is selected. */
   const targets = useMemo(() => {
     if (selected.size) return ids.filter((id) => selected.has(id))
@@ -336,6 +362,7 @@ function useStoreValue() {
     editVersion,
     refreshResults,
     updatePhotos,
+    trashPhotos,
     openEditor,
     settingsSection,
     openSettings,

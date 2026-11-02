@@ -186,7 +186,7 @@ export function Viewer() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (isTyping(e) || document.querySelector('[role="menu"]')) return
+      if (isTyping(e) || document.querySelector('[role="menu"], [data-slot="dialog-content"]')) return
       // The zoom slider uses the arrow keys itself.
       if ((e.target as HTMLElement)?.closest?.('[role="slider"]') && /^(Arrow|Home|End|Page)/.test(e.key)) return
       const mod = e.metaKey || e.ctrlKey
@@ -204,6 +204,14 @@ export function Viewer() {
       if (!mod && (e.key === '=' || e.key === '+')) return zoomTo(ev.scale * ZOOM_STEP, 0, 0, true)
       if (!mod && e.key === '-') return zoomTo(ev.scale / ZOOM_STEP, 0, 0, true)
       if (e.key.toLowerCase() === 's' && !mod) return s.setViewer({ ...v, slideshow: !v.slideshow })
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault()
+        return void s.trashPhotos([id]).then((removed) => {
+          if (!removed) return
+          const ids = v.ids.filter((x) => x !== id)
+          s.setViewer(ids.length ? { ...v, ids, index: Math.min(v.index, ids.length - 1) } : null)
+        })
+      }
       if (mod && e.key.toLowerCase() === 'e') {
         e.preventDefault()
         return void s.openEditor([id])

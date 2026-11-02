@@ -3,6 +3,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { photoTags } from './tagging/store'
+import { previewPaths } from './previews'
 import { type Db, getPhotos, getKeywords, keywordId, normalizeKeyword, reindexFts, tx, PHOTO_COLUMNS, rowToPhoto } from './db'
 import { buildWhere, computeFacets, orderBy, suggest } from './query'
 import { writeSidecar } from './xmp'
@@ -90,6 +91,21 @@ export class Library {
       this.db.prepare('DELETE FROM roots WHERE id = ?').run(id)
       this.db.prepare('DELETE FROM keywords WHERE id NOT IN (SELECT keyword_id FROM photo_keywords)').run()
     })
+  }
+
+  /** Removes photos from the catalog (their files are handled by the caller) and drops their cached previews. */
+  removePhotos(ids: number[]): void {
+    if (!ids.length) return
+    tx(this.db, () => {
+      const delFts = this.db.prepare('DELETE FROM photos_fts WHERE rowid = ?')
+      const del = this.db.prepare('DELETE FROM photos WHERE id = ?')
+      for (const id of ids) {
+        delFts.run(id)
+        del.run(id)
+      }
+      this.db.prepare('DELETE FROM keywords WHERE id NOT IN (SELECT keyword_id FROM photo_keywords)').run()
+    })
+    for (const id of ids) for (const f of Object.values(previewPaths(this.cacheDir, id))) fs.rmSync(f, { force: true })
   }
 
   relinkRoot(id: number, newPath: string): void {

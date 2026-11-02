@@ -5,7 +5,7 @@ import labels from './clip-labels.json'
 
 export interface ScoredTag {
   tag: string
-  /** Vocabulary group the tag came from: subject, scene, event or attribute. */
+  /** Vocabulary group the tag came from, e.g. subject, bird kind, light, or attribute. */
   group: string
   score: number
 }
@@ -35,45 +35,53 @@ export function normalize(v: Float32Array): Float32Array {
   return v
 }
 
+/** Changes whenever the vocabulary does, so stored embeddings can be re-scored. */
+export const VOCABULARY_VERSION = labels.version
+
 /**
- * Tags for a unit-length image embedding. Each group is a softmax over alternatives (with distractor labels that
- * are never stored), so a tag is only kept when it clearly wins; attributes are yes/no pairs.
+ * Tags for a unit-length image embedding, best first and at most `maxTags`. Each group is a softmax over alternatives
+ * (labels sharing a tag add up; distractor labels are never stored), so a tag is only kept when it clearly wins. A group
+ * with parents is scored only when one of them was given: specific kinds sit under broad tags (bird → heron).
+ * Attributes are yes/no pairs. What's in the photo and where come first, then styles, then the look (light, mood…).
  */
 export function tagsFor(embedding: Float32Array): ScoredTag[] {
-  const out: ScoredTag[] = []
+  const prob = new Map(ATTRIBUTES.map((a) => [a.tag, 1 / (1 + Math.exp(SCALE * (dot(a.no, embedding) - dot(a.yes, embedding))))]))
   const suppressed = new Set<string>()
   const attrs: ScoredTag[] = []
+  // Attributes that rule groups out (a document has no place) are decided first.
   for (const a of ATTRIBUTES) {
-    const p = 1 / (1 + Math.exp(SCALE * (dot(a.no, embedding) - dot(a.yes, embedding))))
-    if (p >= a.threshold) {
-      attrs.push({ tag: a.tag, group: 'attribute', score: p })
-      a.suppresses.forEach((g) => suppressed.add(g))
-    }
+    if (!a.suppresses.length || prob.get(a.tag)! < a.threshold) continue
+    attrs.push({ tag: a.tag, group: 'attribute', score: prob.get(a.tag)! })
+    a.suppresses.forEach((g) => suppressed.add(g))
   }
+  const given = new Set<string>()
+  const what: ScoredTag[] = []
+  const look: ScoredTag[] = []
   for (const g of GROUPS) {
-    if (suppressed.has(g.id)) continue
+    if (suppressed.has(g.id) || (g.parents.length && !g.parents.some((t) => given.has(t)))) continue
     const logits = g.labels.map((l) => SCALE * dot(l.vec, embedding))
     const max = Math.max(...logits)
     const exps = logits.map((z) => Math.exp(z - max))
     const sum = exps.reduce((a, b) => a + b, 0)
-    const order = exps.map((e, i) => ({ i, p: e / sum })).sort((a, b) => b.p - a.p)
+    const byTag = new Map<string | null, number>()
+    g.labels.forEach((l, i) => byTag.set(l.tag, (byTag.get(l.tag) ?? 0) + exps[i] / sum))
     let kept = 0
-    for (const { i, p } of order) {
+    for (const [tag, p] of [...byTag].sort((a, b) => b[1] - a[1])) {
       if (p < g.threshold || kept >= g.max) break
-      const tag = g.labels[i].tag
       if (!tag) continue
-      out.push({ tag, group: g.id, score: p })
+      ;(g.look ? look : what).push({ tag, group: g.id, score: p })
+      given.add(tag)
       kept++
     }
   }
-  return [...out, ...attrs]
+  for (const a of ATTRIBUTES) {
+    if (a.suppresses.length || prob.get(a.tag)! < a.threshold) continue
+    if (a.parents.length && !a.parents.some((t) => given.has(t))) continue
+    attrs.push({ tag: a.tag, group: 'attribute', score: prob.get(a.tag)! })
+  }
+  const seen = new Set<string>()
+  return [...what, ...attrs, ...look].filter((t) => !seen.has(t.tag) && seen.add(t.tag)).slice(0, labels.maxTags)
 }
-
-/** Every tag the vocabulary can produce, for autocomplete and filters. */
-export const ALL_TAGS: { tag: string; group: string; title: string }[] = [
-  ...GROUPS.flatMap((g) => g.labels.filter((l) => l.tag).map((l) => ({ tag: l.tag!, group: g.id, title: g.title }))),
-  ...ATTRIBUTES.map((a) => ({ tag: a.tag, group: 'attribute', title: 'Style' }))
-]
 
 /** Embeddings are stored as int8 (512 bytes a photo), enough to re-tag or search later without the model. */
 export function packEmbedding(v: Float32Array): Uint8Array {
