@@ -1,3 +1,5 @@
+import type { PhotoEdit } from './edit'
+
 // Types shared by the main process, preload and renderer.
 
 export type Flag = 'pick' | 'reject' | null
@@ -37,6 +39,10 @@ export interface Photo {
   creator: string | null
   offline: boolean
   hasPreview: boolean
+  /** Non-destructive rotation and crop, if any. */
+  edit: PhotoEdit | null
+  /** Changes whenever the file or its edit does; used to refresh cached images. */
+  rev: number
 }
 
 export interface PhotoDetail extends Photo {
@@ -190,6 +196,20 @@ export interface AppSettings {
   editors: EditorSettings
   backup: BackupSettings
   smartTags: { enabled: boolean }
+}
+
+/** Per-channel counts in 256 bins, from the image as shown (edits applied). */
+export interface Histogram {
+  r: number[]
+  g: number[]
+  b: number[]
+  /** Luminance (Rec. 709). */
+  l: number[]
+  /** Share of pixels with any channel at 0 / at 255. */
+  shadowClip: number
+  highlightClip: number
+  /** Mean luminance, 0–255. */
+  mean: number
 }
 
 export interface SmartTag {

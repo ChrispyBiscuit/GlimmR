@@ -16,6 +16,12 @@ edit photos.
   ISO/focal/aperture ranges. Click to include, ⊖ to exclude. Save any search as a smart album.
 - **Cull with the keyboard.** `0–5` stars, `P` pick, `X` reject, `6–9` color labels, optional auto-advance.
 - **Rewarding to browse.** Rediscover home with *On this day*, highlights, *A look back*, shuffle and slideshow.
+- **Rotate, straighten and crop, non-destructively.** Press `R` in the viewer for the crop tool (aspect presets,
+  straighten up to ±45° with the crop kept inside the photo), or `[` / `]` to turn photos a quarter anywhere.
+  Edits live in the catalog and in backups; originals are never touched, and *Reset to original* undoes them.
+- **Technical detail.** A live RGB/luminance histogram with clipping warnings, plus exposure value, 35 mm
+  equivalent and crop factor, field of view, metering, flash, white balance, colour space and profile, bit depth,
+  serial numbers and more, with EXIF codes shown as words.
 - **Open in your editor.** `Ctrl/⌘ E` opens the selection in your default editor, with per-type defaults
   (e.g. RAW → Capture One, JPEG → Photoshop). Editors are detected automatically, and you can add any app.
 - **Backup and restore.** Catalog backups with checksums and SQLite integrity checks, on a schedule with
@@ -146,6 +152,9 @@ Electron main (Node)                                    Renderer (React + shadcn
   rebuilds it reproducibly (`.github/workflows/models.yml`): the original ONNX export, 8-bit weight-only quantized
   (345 → 92 MB, cosine ≥ 0.9996 to the original). It's tuned on ImageNet's 1,000 sample photos, where B/16 names 66%
   of them exactly (B/32: 60%). It takes about 0.1–0.3 s per photo on a laptop CPU, using half the cores.
+- **Edits**: a rotation, straighten angle and crop per photo (`photos.edit`, see `src/shared/edit.ts`). Thumbnails and
+  previews are rendered with the edit applied; the unedited upright preview is kept for the crop tool, and 100% zoom
+  renders the edited original on demand. Editors are still sent the original file.
 - **Editors**: Lightroom Classic and Capture One are catalog-based, so opening a file outside their catalog
   shows their import window. Ratings and keywords only reach them through XMP sidecars (Settings → Library →
   *Write XMP*, or *Write XMP* on a selection).
@@ -162,6 +171,8 @@ Electron main (Node)                                    Renderer (React + shadcn
 | `6`–`9` | Red / yellow / green / blue label |
 | `Ctrl/⌘ E` | Open in editor |
 | `Delete` / `Backspace` | Move to the Recycle Bin / Trash (asks first) |
+| `R` | Crop and rotate (viewer); `Enter` saves, `Esc` cancels |
+| `[` / `]` | Rotate left / right |
 | `S` | Slideshow |
 | `I` | Info panel (viewer) |
 | `Z` / `Space` / click | Toggle fit and 100% (viewer) |

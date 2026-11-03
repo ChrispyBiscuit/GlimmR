@@ -170,6 +170,8 @@ Priority: **P0** = v1.0 MVP (built now), **P1** = v1.1, **P2** = later.
 | ORG-4 | Rename / delete albums, smart albums and keywords. | P0 |
 | ORG-5 | Move/rename files on disk from inside GlimmR. | P2 |
 | ORG-6 | Delete photos: `Delete`/`Backspace` or the context menu moves the selection (and sidecars only it uses) to the Recycle Bin / Trash after a confirmation, and removes it from the catalog. | P1 (shipped) |
+| VIEW-9 | Non-destructive rotate (quarter turns), straighten (±45°) and crop with aspect presets, stored in the catalog; previews and grid follow the edit; originals untouched; reset any time. | P1 (shipped) |
+| VIEW-10 | Histogram (RGB + luminance, clipping) and a technical panel: EV, 35 mm equivalent, field of view, metering, flash, white balance, colour space/profile, bit depth, serials; EXIF codes as words. | P1 (shipped) |
 
 ### 7.7 Open in external editor
 

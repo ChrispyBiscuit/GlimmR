@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, Flag, FolderOpen, Info, Pause, Pencil, Play, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, Crop, Flag, FolderOpen, Info, Pause, Pencil, Play, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
@@ -9,10 +9,13 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils'
 import { useStore } from '../store'
 import { api, originalUrl, previewUrl, thumbUrl } from '../api'
-import { camera, exposureParts, fmtBytes, fmtDate, fmtShutter, LABEL_COLORS, quoteValue } from '../format'
+import { camera, exposureParts, fmtBytes, fmtDate, fmtShutter, LABEL_COLORS, metaValue, quoteValue, ratioName, technicalRows } from '../format'
 import { cullingUpdate, isTyping } from '../culling'
 import { clampView, fitScale, fromSlider, MAX_SCALE, toSlider, zoomAt, type Box, type View } from '../zoom'
+import { CropEditor } from './CropEditor'
+import { Histogram } from './Histogram'
 import { KeywordEditor } from './KeywordEditor'
+import { editedSize, isEdited, type PhotoEdit } from '../../../shared/edit'
 import { StarRating } from './SelectionBar'
 import { COLOR_LABELS } from '../../../shared/types'
 import type { PhotoDetail } from '../../../shared/types'
@@ -23,12 +26,6 @@ const mac = navigator.userAgent.includes('Mac')
 const FIT_PAD = { x: 24, top: 64, bottom: 96 }
 const ZOOM_STEP = 1.5
 
-// Raw metadata keys shown in each info group (the rest appear under "All fields").
-const GROUPS: { title: string; keys: string[] }[] = [
-  { title: 'Capture', keys: ['DateTimeOriginal', 'Make', 'Model', 'LensModel', 'SerialNumber', 'BodySerialNumber', 'Software'] },
-  { title: 'Exposure', keys: ['ExposureTime', 'FNumber', 'ISO', 'FocalLength', 'FocalLengthIn35mmFormat', 'ExposureProgram', 'ExposureCompensation', 'MeteringMode', 'Flash', 'WhiteBalance'] },
-  { title: 'File', keys: ['FileName', 'FileType', 'FileSize', 'ExifImageWidth', 'ExifImageHeight', 'ColorSpace', 'Sidecar'] }
-]
 
 function Row({ k, v, onClick }: { k: string; v: ReactNode; onClick?: () => void }) {
   return (
@@ -56,6 +53,25 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
   )
 }
 
+/** "Rotated 90°, straightened 2.5°, cropped to 3000 × 2000", with a way back to the original. */
+function EditSummary({ edit, width, height, onReset }: { edit: PhotoEdit; width: number; height: number; onReset: () => void }) {
+  const size = editedSize(width, height, edit)
+  const parts = [
+    edit.rotate ? `Rotated ${edit.rotate === 270 ? '90° left' : edit.rotate === 90 ? '90° right' : '180°'}` : '',
+    edit.angle ? `straightened ${edit.angle > 0 ? '+' : ''}${edit.angle.toFixed(1)}°` : '',
+    edit.crop || edit.angle ? `cropped to ${Math.round(size.w)} × ${Math.round(size.h)}` : ''
+  ].filter(Boolean)
+  const text = parts.join(', ')
+  return (
+    <span className="tnum">
+      {text.charAt(0).toUpperCase() + text.slice(1)}.{' '}
+      <button type="button" className="text-ink-muted underline underline-offset-2 hover:text-ink" onClick={onReset}>
+        Reset to original
+      </button>
+    </span>
+  )
+}
+
 export function Viewer() {
   const s = useStore()
   const v = s.viewer!
@@ -71,6 +87,8 @@ export function Viewer() {
   const [hiRes, setHiRes] = useState(false)
   const [idle, setIdle] = useState(false)
   const [metaFilter, setMetaFilter] = useState('')
+  const [cropping, setCropping] = useState(false)
+  const [saving, setSaving] = useState(false)
   const stage = useRef<HTMLDivElement>(null)
   const strip = useRef<HTMLDivElement>(null)
   const drag = useRef<{ px: number; py: number; x: number; y: number; moved: boolean } | null>(null)
@@ -112,15 +130,16 @@ export function Viewer() {
   useEffect(() => {
     setHiRes(false)
     setView(null)
+    setCropping(false)
     if (!photo || !BROWSER_EXTS.has(photo.ext) || photo.offline) return
     const img = new Image()
     img.onload = () => setHiRes(true)
-    img.src = originalUrl(photo.id, photo.mtime)
-    for (const n of [v.ids[v.index + 1], v.ids[v.index - 1]]) if (n != null) new Image().src = previewUrl(n)
+    img.src = originalUrl(photo.id, photo.rev)
+    for (const n of [v.ids[v.index + 1], v.ids[v.index - 1]]) if (n != null) new Image().src = previewUrl(n, s.cache.get(n)?.rev ?? 0)
     return () => {
       img.onload = null
     }
-  }, [photo?.id, photo?.mtime, photo?.ext, photo?.offline, v.ids, v.index])
+  }, [photo?.id, photo?.rev, photo?.ext, photo?.offline, v.ids, v.index])
 
   useEffect(() => {
     const el = stage.current
@@ -186,7 +205,8 @@ export function Viewer() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (isTyping(e) || document.querySelector('[role="menu"], [data-slot="dialog-content"]')) return
+      // The crop tool handles its own keys.
+      if (cropping || isTyping(e) || document.querySelector('[role="menu"], [data-slot="dialog-content"]')) return
       // The zoom slider uses the arrow keys itself.
       if ((e.target as HTMLElement)?.closest?.('[role="slider"]') && /^(Arrow|Home|End|Page)/.test(e.key)) return
       const mod = e.metaKey || e.ctrlKey
@@ -204,6 +224,8 @@ export function Viewer() {
       if (!mod && (e.key === '=' || e.key === '+')) return zoomTo(ev.scale * ZOOM_STEP, 0, 0, true)
       if (!mod && e.key === '-') return zoomTo(ev.scale / ZOOM_STEP, 0, 0, true)
       if (e.key.toLowerCase() === 's' && !mod) return s.setViewer({ ...v, slideshow: !v.slideshow })
+      if (e.key.toLowerCase() === 'r' && !mod && photo && !photo.offline) return startCrop()
+      if ((e.key === '[' || e.key === ']') && !mod && photo && !photo.offline) return void rotate(e.key === ']' ? 1 : -1)
       if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault()
         return void s.trashPhotos([id]).then((removed) => {
@@ -227,18 +249,44 @@ export function Viewer() {
     return () => window.removeEventListener('keydown', onKey)
   })
 
+  const startCrop = (): void => {
+    setView(null)
+    setCropping(true)
+  }
+  const refresh = async (): Promise<void> => {
+    const [p] = await api.photos([id])
+    if (p) s.putPhotos([p])
+    setDetail(await api.detail(id))
+  }
+  const saveEdit = async (e: PhotoEdit | null): Promise<void> => {
+    setSaving(true)
+    try {
+      await api.setEdit(id, e)
+      await refresh()
+    } finally {
+      setSaving(false)
+      setCropping(false)
+    }
+  }
+  const rotate = async (dir: 1 | -1): Promise<void> => {
+    await api.rotatePhotos([id], dir)
+    await refresh()
+  }
+
   const onImageClick = (e: React.MouseEvent<HTMLImageElement>): void => {
     if (!view) zoomTo(zoomIn(), ...fromCentre(e), true)
   }
   const onImageLoad = (e: React.SyntheticEvent<HTMLImageElement>): void => {
     const { naturalWidth: nw, naturalHeight: nh } = e.currentTarget
     if (!photo || !nw || !nh) return
-    const full = Math.max(photo.width ?? 0, photo.height ?? 0)
+    // Lay out at the (edited) original's pixel size, so 100% is real pixels.
+    const size = photo.width && photo.height ? editedSize(photo.width, photo.height, photo.edit) : null
+    const full = size ? Math.max(size.w, size.h) : 0
     const k = full > 0 ? full / Math.max(nw, nh) : 1
-    setDims((d) => (d && d.id === photo.id && Math.abs(d.w - nw * k) < 2 ? d : { id: photo.id, w: nw * k, h: nh * k }))
+    setDims((d) => (d && d.id === photo.id && Math.abs(d.w - nw * k) < 2 && Math.abs(d.h - nh * k) < 2 ? d : { id: photo.id, w: nw * k, h: nh * k }))
   }
 
-  const src = photo ? (hiRes ? originalUrl(photo.id, photo.mtime) : previewUrl(photo.id, photo.mtime)) : undefined
+  const src = photo ? (hiRes ? originalUrl(photo.id, photo.rev) : previewUrl(photo.id, photo.rev)) : undefined
   const editors = s.settings?.editors.editors ?? []
   const defaultEditor = editors.find((e) => e.id === s.settings?.editors.defaultEditor)
   const searchFor = (q: string): void => {
@@ -353,6 +401,14 @@ export function Viewer() {
               </div>
               <Tooltip>
                 <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon-sm" aria-label="Crop and rotate" aria-pressed={cropping} disabled={photo.offline} onClick={() => (cropping ? setCropping(false) : startCrop())}>
+                    <Crop className={cn(isEdited(photo.edit) && 'text-ink')} />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{photo.offline ? 'The original is offline' : 'Crop and rotate (R)'}</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
                   <Button variant="ghost" size="icon-sm" aria-label="Show in folder" onClick={() => void api.reveal(id)}>
                     <FolderOpen />
                   </Button>
@@ -439,13 +495,18 @@ export function Viewer() {
           )}
           {photo?.offline && <p className="absolute top-16 left-4 rounded-sm bg-reject/90 px-2 py-1 text-xs text-white">The original is offline. Showing the saved preview.</p>}
         </div>
+        {cropping && photo && (
+          <div className="absolute inset-0 z-[5] flex flex-col bg-canvas">
+            <CropEditor key={photo.id} photo={photo} saving={saving} onDone={(e) => void saveEdit(e)} onCancel={() => setCropping(false)} />
+          </div>
+        )}
 
-        {!view && v.index > 0 && (
+        {!view && !cropping && v.index > 0 && (
           <Button variant="ghost" size="icon-lg" aria-label="Previous photo" className={cn('absolute top-1/2 left-3 -translate-y-1/2 rounded-full bg-black/40', chrome)} onClick={() => go(-1)}>
             <ChevronLeft />
           </Button>
         )}
-        {!view && v.index < v.ids.length - 1 && (
+        {!view && !cropping && v.index < v.ids.length - 1 && (
           <Button variant="ghost" size="icon-lg" aria-label="Next photo" className={cn('absolute top-1/2 right-3 -translate-y-1/2 rounded-full bg-black/40', chrome)} onClick={() => go(1)}>
             <ChevronRight />
           </Button>
@@ -457,7 +518,7 @@ export function Viewer() {
           </Button>
         )}
 
-        <div className={cn('absolute inset-x-0 bottom-0 flex h-20 items-center gap-3 bg-gradient-to-t from-black/70 to-transparent pr-3', chrome)}>
+        <div className={cn('absolute inset-x-0 bottom-0 flex h-20 items-center gap-3 bg-gradient-to-t from-black/70 to-transparent pr-3', chrome, cropping && 'hidden')}>
           <div ref={strip} className="scroll-thin flex h-full min-w-0 flex-1 items-center gap-1 overflow-x-auto px-3">
             {v.ids.slice(Math.max(0, v.index - 30), v.index + 31).map((fid, k) => {
               const idx = Math.max(0, v.index - 30) + k
@@ -471,7 +532,7 @@ export function Viewer() {
                   onClick={() => s.setViewer({ ...v, index: idx })}
                   className={cn('h-14 shrink-0 overflow-hidden rounded-sm transition-opacity', current ? 'opacity-100 ring-2 ring-ink' : 'opacity-50 hover:opacity-90')}
                 >
-                  <img src={thumbUrl(fid, s.cache.get(fid)?.mtime ?? 0)} alt="" className="h-full w-auto" draggable={false} />
+                  <img src={thumbUrl(fid, s.cache.get(fid)?.rev ?? 0)} alt="" className="h-full w-auto" draggable={false} />
                 </button>
               )
             })}
@@ -523,6 +584,9 @@ export function Viewer() {
               ))}
             </p>
           )}
+          <div className="mt-4">
+            <Histogram id={detail.id} rev={detail.rev} />
+          </div>
 
           <div className="mt-6">
             <Group title="Description">
@@ -589,7 +653,6 @@ export function Viewer() {
                 {camera(detail) && <Row k="Camera" v={camera(detail)} onClick={() => searchFor(`camera:=${quoteValue(`${detail.make ?? ''} ${detail.model ?? ''}`.trim())}`)} />}
                 {detail.lens && <Row k="Lens" v={detail.lens} onClick={() => searchFor(`lens:=${quoteValue(detail.lens!)}`)} />}
                 {detail.creator && <Row k="Creator" v={detail.creator} onClick={() => searchFor(`creator:=${quoteValue(detail.creator!)}`)} />}
-                {GROUPS[0].keys.slice(4).map((k) => metaMap.get(k) && <Row key={k} k={k} v={metaMap.get(k)} />)}
               </dl>
             </Group>
             <Group title="Exposure">
@@ -598,9 +661,17 @@ export function Viewer() {
                 {detail.aperture != null && <Row k="Aperture" v={<span className="tnum">{`ƒ/${Number(detail.aperture.toFixed(1))}`}</span>} onClick={() => searchFor(`f:${detail.aperture}`)} />}
                 {detail.iso != null && <Row k="ISO" v={<span className="tnum">{detail.iso}</span>} onClick={() => searchFor(`iso:${detail.iso}`)} />}
                 {detail.focal != null && <Row k="Focal length" v={<span className="tnum">{`${Math.round(detail.focal)}\u00a0mm`}</span>} onClick={() => searchFor(`focal:${detail.focal}`)} />}
-                {GROUPS[1].keys.slice(4).map((k) => metaMap.get(k) && <Row key={k} k={k.replace(/([a-z])([A-Z])/g, '$1 $2')} v={metaMap.get(k)} onClick={() => searchFor(`${k}:=${quoteValue(metaMap.get(k)!)}`)} />)}
               </dl>
             </Group>
+            {technicalRows(detail, metaMap).length > 0 && (
+              <Group title="Technical">
+                <dl>
+                  {technicalRows(detail, metaMap).map((r) => (
+                    <Row key={r.label} k={r.label} v={<span className="tnum">{r.value}</span>} onClick={r.search ? () => searchFor(`${r.search![0]}:=${quoteValue(r.search![1])}`) : undefined} />
+                  ))}
+                </dl>
+              </Group>
+            )}
             {detail.lat != null && detail.lon != null && (
               <Group title="Location">
                 <dl>
@@ -612,7 +683,13 @@ export function Viewer() {
               <dl>
                 <Row k="Name" v={detail.filename} />
                 <Row k="Size" v={<span className="tnum">{fmtBytes(detail.size)}</span>} />
-                {detail.width && detail.height && <Row k="Dimensions" v={<span className="tnum">{`${detail.width} × ${detail.height} (${((detail.width * detail.height) / 1e6).toFixed(1)} MP)`}</span>} />}
+                {detail.width && detail.height && (
+                  <Row
+                    k="Dimensions"
+                    v={<span className="tnum">{`${detail.width} × ${detail.height} (${((detail.width * detail.height) / 1e6).toFixed(1)} MP${ratioName(detail.width, detail.height) ? `, ${ratioName(detail.width, detail.height)}` : ''})`}</span>}
+                  />
+                )}
+                {isEdited(detail.edit) && detail.width && detail.height && <Row k="Edit" v={<EditSummary edit={detail.edit} width={detail.width} height={detail.height} onReset={() => void saveEdit(null)} />} />}
                 <Row k="Location" v={<span className="selectable text-xs break-all text-ink-muted">{detail.path}</span>} />
               </dl>
             </Group>
@@ -622,7 +699,7 @@ export function Viewer() {
                 {meta
                   .filter((m) => !metaFilter || `${m.key} ${m.value}`.toLowerCase().includes(metaFilter.toLowerCase()))
                   .map((m, i) => (
-                    <Row key={`${m.key}-${i}`} k={m.key} v={m.value} onClick={() => searchFor(`${m.key}:=${quoteValue(m.value)}`)} />
+                    <Row key={`${m.key}-${i}`} k={m.key} v={metaValue(m.key, m.value)} onClick={() => searchFor(`${m.key}:=${quoteValue(m.value)}`)} />
                   ))}
               </dl>
             </Group>

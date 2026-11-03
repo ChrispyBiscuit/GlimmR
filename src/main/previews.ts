@@ -5,8 +5,9 @@ import path from 'node:path'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import os from 'node:os'
-import sharp, { type Sharp } from 'sharp'
+import sharp, { type OutputInfo, type Sharp } from 'sharp'
 import { RAW_EXTS, readExifThumbnail } from './metadata'
+import { effectiveCrop, fitCrop, frameSize, isEdited, type PhotoEdit } from '../shared/edit'
 
 sharp.concurrency(Math.max(1, Math.min(4, os.cpus().length - 1)))
 
@@ -14,15 +15,23 @@ export const THUMB_SIZE = 480
 export const PREVIEW_SIZE = 2560
 
 export interface PreviewPaths {
+  /** Grid thumbnail, with any edit applied. */
   thumb: string
+  /** Upright preview without the edit: what the crop tool works on. */
   preview: string
+  /** Preview with the edit applied (only for edited photos). */
+  view: string
+  /** Full-resolution render of the edit, made on demand for 100% zoom (only for edited photos). */
+  full: string
 }
 
 export function previewPaths(cacheDir: string, id: number): PreviewPaths {
   const bucket = String(Math.floor(id / 1000))
   return {
     thumb: path.join(cacheDir, 'thumbs', bucket, `${id}.jpg`),
-    preview: path.join(cacheDir, 'previews', bucket, `${id}.jpg`)
+    preview: path.join(cacheDir, 'previews', bucket, `${id}.jpg`),
+    view: path.join(cacheDir, 'edited', bucket, `${id}.jpg`),
+    full: path.join(cacheDir, 'edited', bucket, `${id}-full.jpg`)
   }
 }
 
@@ -137,27 +146,68 @@ function pipeline(input: Buffer | string, orientation: number | 'auto'): Sharp {
   return img
 }
 
+/**
+ * Applies an edit to an upright image: turns and straightens it in one rotation, then cuts out the crop. The crop
+ * is in the quarter-turned frame, which sits centred in the rotated image's bounding box.
+ */
+export async function applyEdit(upright: Sharp, e: PhotoEdit): Promise<Sharp> {
+  const src = await upright.flatten({ background: '#111' }).raw().toBuffer({ resolveWithObject: true })
+  const raw = (i: OutputInfo): { raw: { width: number; height: number; channels: 1 | 2 | 3 | 4 } } => ({ raw: { width: i.width, height: i.height, channels: i.channels } })
+  const frame = frameSize(src.info.width, src.info.height, e.rotate)
+  let crop = effectiveCrop(e, frame.w, frame.h)
+  if (crop) crop = fitCrop(crop, frame.w, frame.h, e.angle)
+  const turn = e.rotate + e.angle
+  if (turn % 360 === 0 && !crop) return sharp(src.data, raw(src.info))
+  const turned = turn % 360 === 0 ? src : await sharp(src.data, raw(src.info)).rotate(turn, { background: '#111' }).raw().toBuffer({ resolveWithObject: true })
+  if (!crop) return sharp(turned.data, raw(turned.info))
+  const ox = (turned.info.width - frame.w) / 2
+  const oy = (turned.info.height - frame.h) / 2
+  // Round inwards, and when straightened keep off the antialiased edge, so no background shows.
+  const inset = e.angle ? 1 : 0
+  const left = Math.max(0, Math.ceil(ox + crop.x * frame.w - 1e-6) + inset)
+  const top = Math.max(0, Math.ceil(oy + crop.y * frame.h - 1e-6) + inset)
+  const right = Math.min(turned.info.width, Math.floor(ox + (crop.x + crop.w) * frame.w + 1e-6) - inset)
+  const bottom = Math.min(turned.info.height, Math.floor(oy + (crop.y + crop.h) * frame.h + 1e-6) - inset)
+  const width = Math.max(1, right - left)
+  const height = Math.max(1, bottom - top)
+  return sharp(turned.data, raw(turned.info)).extract({ left, top, width, height })
+}
+
 const inflight = new Map<string, Promise<void>>()
 
-/** Generates thumbnail and preview for a photo. Concurrent calls for the same photo share one job. */
-export function generatePreviews(file: string, ext: string, exifOrientation: number, out: PreviewPaths): Promise<void> {
+/**
+ * Generates a photo's previews: the upright preview, plus the edited one when there's an edit, and the thumbnail
+ * from whichever is shown. Concurrent calls for the same photo share one job.
+ */
+export function generatePreviews(file: string, ext: string, exifOrientation: number, out: PreviewPaths, edit: PhotoEdit | null = null): Promise<void> {
   const existing = inflight.get(out.thumb)
   if (existing) return existing
   const job = (async () => {
     const { input, orientation } = await sourceFor(file, ext, exifOrientation)
-    await fs.promises.mkdir(path.dirname(out.thumb), { recursive: true })
-    await fs.promises.mkdir(path.dirname(out.preview), { recursive: true })
-    // Render the preview once, then derive the thumbnail from it.
-    const preview = await pipeline(input, orientation)
-      .resize(PREVIEW_SIZE, PREVIEW_SIZE, { fit: 'inside', withoutEnlargement: true })
-      .flatten({ background: '#111' })
-      .jpeg({ quality: 85, mozjpeg: false })
-      .toBuffer()
+    for (const f of [out.thumb, out.preview, out.view]) await fs.promises.mkdir(path.dirname(f), { recursive: true })
+    const toPreview = (img: Sharp): Promise<Buffer> =>
+      img.resize(PREVIEW_SIZE, PREVIEW_SIZE, { fit: 'inside', withoutEnlargement: true }).flatten({ background: '#111' }).jpeg({ quality: 85, mozjpeg: false }).toBuffer()
+    const preview = await toPreview(pipeline(input, orientation))
     await fs.promises.writeFile(out.preview, preview)
-    await sharp(preview).resize(THUMB_SIZE, THUMB_SIZE, { fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 78 }).toFile(out.thumb)
+    await fs.promises.rm(out.full, { force: true })
+    let shown = preview
+    if (isEdited(edit)) {
+      // Edit at source resolution so crops stay sharp.
+      shown = await toPreview(await applyEdit(pipeline(input, orientation), edit))
+      await fs.promises.writeFile(out.view, shown)
+    } else await fs.promises.rm(out.view, { force: true })
+    await sharp(shown).resize(THUMB_SIZE, THUMB_SIZE, { fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 78 }).toFile(out.thumb)
   })().finally(() => inflight.delete(out.thumb))
   inflight.set(out.thumb, job)
   return job
+}
+
+/** Renders an edited original at full resolution, for viewing at 100%. Only for formats the viewer shows directly. */
+export async function renderFullEdit(file: string, edit: PhotoEdit, out: string): Promise<void> {
+  await fs.promises.mkdir(path.dirname(out), { recursive: true })
+  const img = await applyEdit(sharp(file, { failOn: 'none', limitInputPixels: false }).rotate(), edit)
+  await img.jpeg({ quality: 92 }).toFile(`${out}.tmp`)
+  await fs.promises.rename(`${out}.tmp`, out)
 }
 
 /** Pixel size of the decodable image, for files whose metadata lacks dimensions. */

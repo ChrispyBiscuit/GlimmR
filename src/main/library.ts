@@ -4,7 +4,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { photoTags } from './tagging/store'
 import { previewPaths } from './previews'
-import { type Db, getPhotos, getKeywords, keywordId, normalizeKeyword, reindexFts, tx, PHOTO_COLUMNS, rowToPhoto } from './db'
+import { editedSize, sanitizeEdit, type PhotoEdit } from '../shared/edit'
+import { type Db, getPhotos, parseEdit, getKeywords, keywordId, normalizeKeyword, reindexFts, tx, PHOTO_COLUMNS, rowToPhoto } from './db'
 import { buildWhere, computeFacets, orderBy, suggest } from './query'
 import { writeSidecar } from './xmp'
 import type {
@@ -108,6 +109,12 @@ export class Library {
     for (const id of ids) for (const f of Object.values(previewPaths(this.cacheDir, id))) fs.rmSync(f, { force: true })
   }
 
+  /** Saves (or with null, clears) a photo's non-destructive edit. */
+  setEdit(id: number, edit: PhotoEdit | null): void {
+    const e = sanitizeEdit(edit)
+    this.db.prepare('UPDATE photos SET edit = ?, edited_at = ? WHERE id = ?').run(e ? JSON.stringify(e) : null, Date.now(), id)
+  }
+
   relinkRoot(id: number, newPath: string): void {
     this.db.prepare('UPDATE roots SET path = ? WHERE id = ?').run(path.resolve(newPath), id)
     this.db.prepare('UPDATE photos SET offline = 0 WHERE root_id = ?').run(id)
@@ -127,10 +134,15 @@ export class Library {
     const ob = orderBy(sort, req.scope)
     try {
       const rows = this.db
-        .prepare(`SELECT p.id, p.width, p.height, p.taken_day FROM photos p ${where.join} WHERE ${where.sql} ${ob.sql}`)
-        .all(...where.params, ...ob.params) as { id: number; width: number | null; height: number | null; taken_day: string | null }[]
+        .prepare(`SELECT p.id, p.width, p.height, p.taken_day, p.edit FROM photos p ${where.join} WHERE ${where.sql} ${ob.sql}`)
+        .all(...where.params, ...ob.params) as { id: number; width: number | null; height: number | null; taken_day: string | null; edit: string | null }[]
       const ids = rows.map((r) => r.id)
-      const aspects = rows.map((r) => (r.width && r.height ? Math.round((r.width / r.height) * 1000) / 1000 : 1.5))
+      const aspect = (r: (typeof rows)[number]): number => {
+        if (!r.width || !r.height) return 1.5
+        const { w, h } = r.edit ? editedSize(r.width, r.height, parseEdit(r.edit)) : { w: r.width, h: r.height }
+        return Math.round((w / h) * 1000) / 1000
+      }
+      const aspects = rows.map(aspect)
       const days = rows.map((r) => r.taken_day)
       const page = ids.slice(req.offset, req.offset + req.limit)
       return { total: ids.length, ids, aspects, days, photos: getPhotos(this.db, page), error: where.error, tookMs: Math.round(performance.now() - t0) }

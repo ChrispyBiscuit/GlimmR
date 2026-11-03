@@ -5,7 +5,8 @@ import { pathToFileURL } from 'node:url'
 import { AppContext, createApi } from './api'
 import { getPhotos } from './db'
 import { BROWSER_EXTS } from './metadata'
-import { generatePreviews, previewPaths } from './previews'
+import { generatePreviews, previewPaths, renderFullEdit } from './previews'
+import { isEdited } from '../shared/edit'
 import type { Api } from '../shared/api'
 import { TITLE_BAR } from './titlebar'
 
@@ -22,6 +23,8 @@ const ctx = new AppContext(path.join(userData, 'Library', 'catalog.db'), path.jo
 const api = createApi(ctx)
 
 /** Serves glimmr://thumb/<id>, glimmr://preview/<id> and glimmr://original/<id>. */
+// glimmr://thumb, preview (edited when there's an edit), source (the unedited preview, for the crop tool) and
+// original (the file itself, or a full-resolution render of its edit).
 async function handleImage(request: Request): Promise<Response> {
   await ctx.ready
   const url = new URL(request.url)
@@ -29,14 +32,25 @@ async function handleImage(request: Request): Promise<Response> {
   const id = Number(url.pathname.slice(1))
   const [photo] = getPhotos(ctx.library.db, [id])
   if (!photo) return new Response('not found', { status: 404 })
-  if (kind === 'original' && BROWSER_EXTS.has(photo.ext) && !photo.offline) return fetchFile(photo.path)
   const paths = previewPaths(ctx.cacheDir, id)
-  const file = kind === 'thumb' ? paths.thumb : paths.preview
+  const edited = isEdited(photo.edit)
+  if (kind === 'original' && BROWSER_EXTS.has(photo.ext) && !photo.offline) {
+    if (!edited) return fetchFile(photo.path)
+    if (!fs.existsSync(paths.full)) {
+      try {
+        await renderFullEdit(photo.path, photo.edit!, paths.full)
+      } catch {
+        return new Response('render failed', { status: 500 })
+      }
+    }
+    return fetchFile(paths.full)
+  }
+  const file = kind === 'thumb' ? paths.thumb : kind === 'preview' && edited ? paths.view : paths.preview
   if (!fs.existsSync(file)) {
     if (photo.offline) return new Response('offline', { status: 404 })
     try {
       const o = ctx.library.db.prepare('SELECT exif_orientation FROM photos WHERE id = ?').get(id) as { exif_orientation: number }
-      await generatePreviews(photo.path, photo.ext, o.exif_orientation, paths)
+      await generatePreviews(photo.path, photo.ext, o.exif_orientation, paths, photo.edit)
       ctx.library.db.prepare('UPDATE photos SET has_preview = 1 WHERE id = ?').run(id)
     } catch {
       return new Response('no preview', { status: 404 })

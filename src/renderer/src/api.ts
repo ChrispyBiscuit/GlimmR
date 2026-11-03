@@ -18,3 +18,5 @@ export const bridge = (): Bridge => window.glimmr
 export const thumbUrl = (id: number, v = 0): string => `glimmr://thumb/${id}?v=${v}`
 export const previewUrl = (id: number, v = 0): string => `glimmr://preview/${id}?v=${v}`
 export const originalUrl = (id: number, v = 0): string => `glimmr://original/${id}?v=${v}`
+/** The upright preview without the photo's edit, for the crop tool. */
+export const sourceUrl = (id: number, v = 0): string => `glimmr://source/${id}?v=${v}`

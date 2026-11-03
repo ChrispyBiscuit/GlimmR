@@ -2,7 +2,7 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
-import { type Db, tx, keywordId, localDay, reindexFts } from './db'
+import { type Db, tx, keywordId, localDay, parseEdit, reindexFts } from './db'
 import { isSupported, RAW_EXTS, readMetadata, findSidecar, type ExtractedMeta } from './metadata'
 import { generatePreviews, imageSize, previewPaths } from './previews'
 
@@ -225,7 +225,8 @@ export async function scanRoot(db: Db, rootId: number, rootPath: string, opts: S
             orientation = o.exif_orientation
           }
           try {
-            await generatePreviews(f.abs, f.ext, orientation, previewPaths(opts.cacheDir, id!))
+            const { edit } = db.prepare('SELECT edit FROM photos WHERE id = ?').get(id!) as { edit: string | null }
+            await generatePreviews(f.abs, f.ext, orientation, previewPaths(opts.cacheDir, id!), parseEdit(edit))
             db.prepare('UPDATE photos SET has_preview = 1, offline = 0 WHERE id = ?').run(id!)
           } catch {
             db.prepare('UPDATE photos SET has_preview = 0 WHERE id = ?').run(id!)

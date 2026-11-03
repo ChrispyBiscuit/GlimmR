@@ -18,11 +18,13 @@ import type {
   Scope,
   SearchRequest,
   SearchResult,
+  Histogram,
   SmartAlbum,
   SmartTagStatus,
   Suggestion,
   UpdateStatus
 } from './types'
+import type { PhotoEdit } from './edit'
 
 export interface Api {
   // library folders
@@ -96,6 +98,12 @@ export interface Api {
   platform(): string
   /** Recolours the native window buttons (Windows/Linux) to match the app's top bar. */
   setTitleBarTheme(theme: 'dark' | 'light'): void
+
+  /** Saves a photo's non-destructive rotate/crop (null resets it), re-renders its previews and returns it. */
+  setEdit(id: number, edit: PhotoEdit | null): Promise<Photo | null>
+  /** Turns photos a quarter clockwise (1) or anticlockwise (-1). */
+  rotatePhotos(ids: number[], dir: 1 | -1): Promise<void>
+  histogram(id: number): Promise<Histogram | null>
 
   /** Moves photos (and sidecars only they use) to the system trash and removes them from the catalog. */
   trashPhotos(ids: number[]): Promise<{ trashed: number; failed: number; error?: string }>

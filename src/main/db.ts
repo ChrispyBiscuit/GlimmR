@@ -1,8 +1,9 @@
 import { DatabaseSync } from 'node:sqlite'
 import path from 'node:path'
 import type { Photo } from '../shared/types'
+import { sanitizeEdit } from '../shared/edit'
 
-export const SCHEMA_VERSION = 1
+export const SCHEMA_VERSION = 2
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS roots (
@@ -46,6 +47,9 @@ CREATE TABLE IF NOT EXISTS photos (
   creator TEXT,
   offline INTEGER NOT NULL DEFAULT 0,
   has_preview INTEGER NOT NULL DEFAULT 0,
+  -- Non-destructive edit (src/shared/edit.ts) as JSON, and when it last changed (busts cached images).
+  edit TEXT,
+  edited_at INTEGER NOT NULL DEFAULT 0,
   UNIQUE (root_id, rel_path)
 );
 CREATE INDEX IF NOT EXISTS photos_taken ON photos(taken_at);
@@ -136,9 +140,17 @@ export function openDb(file: string): Db {
   const db = new DatabaseSync(file)
   db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA synchronous = NORMAL;')
   db.exec(SCHEMA)
+  migrate(db)
   const row = db.prepare('PRAGMA user_version').get() as { user_version: number }
   if (row.user_version < SCHEMA_VERSION) db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
   return db
+}
+
+/** Adds columns that catalogs made by earlier versions lack. CREATE TABLE IF NOT EXISTS leaves existing tables alone. */
+function migrate(db: Db): void {
+  const has = new Set((db.prepare('PRAGMA table_info(photos)').all() as { name: string }[]).map((c) => c.name))
+  if (!has.has('edit')) db.exec('ALTER TABLE photos ADD COLUMN edit TEXT')
+  if (!has.has('edited_at')) db.exec('ALTER TABLE photos ADD COLUMN edited_at INTEGER NOT NULL DEFAULT 0')
 }
 
 /** Local calendar day for an epoch-ms time, as YYYY-MM-DD. */
@@ -163,7 +175,7 @@ export function tx<T>(db: Db, fn: () => T): T {
 /** Columns selected for a Photo, joined with its root. */
 export const PHOTO_COLUMNS = `p.id, p.root_id, p.rel_path, p.filename, p.ext, p.kind, p.size, p.mtime, p.added_at,
   p.taken_at, p.width, p.height, p.orientation, p.make, p.model, p.lens, p.focal, p.aperture, p.shutter, p.iso,
-  p.lat, p.lon, p.rating, p.flag, p.label, p.title, p.caption, p.creator, p.offline, p.has_preview,
+  p.lat, p.lon, p.rating, p.flag, p.label, p.title, p.caption, p.creator, p.offline, p.has_preview, p.edit, p.edited_at,
   r.path AS root_path`
 
 export function rowToPhoto(r: Record<string, any>): Photo {
@@ -198,7 +210,18 @@ export function rowToPhoto(r: Record<string, any>): Photo {
     caption: r.caption,
     creator: r.creator,
     offline: !!r.offline,
-    hasPreview: !!r.has_preview
+    hasPreview: !!r.has_preview,
+    edit: parseEdit(r.edit),
+    rev: r.mtime + (r.edited_at ?? 0)
+  }
+}
+
+export function parseEdit(json: string | null | undefined): Photo['edit'] {
+  if (!json) return null
+  try {
+    return sanitizeEdit(JSON.parse(json))
+  } catch {
+    return null
   }
 }
 

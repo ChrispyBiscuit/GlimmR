@@ -160,7 +160,7 @@ export const FIELD_HELP: Record<string, string> = {
   height: 'Pixel height',
   size: 'File size, e.g. size:>20mb',
   has: 'gps, keywords, title, caption, rating, label, flag',
-  is: 'offline, online, raw, pick, reject, unrated'
+  is: 'offline, online, raw, pick, reject, unrated, edited'
 }
 
 const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
@@ -324,6 +324,9 @@ function buildTerm(t: Term): Built | string {
         case 'reject':
         case 'rejected':
           return { sql: "(p.flag = 'reject')", params: [] }
+        case 'edited':
+        case 'cropped':
+          return { sql: '(p.edit IS NOT NULL)', params: [] }
         case 'unrated':
           return { sql: '(p.rating = 0)', params: [] }
         default:
@@ -574,7 +577,7 @@ export function suggest(db: Db, input: string): Suggestion[] {
     orientation: ['landscape', 'portrait', 'square'],
     type: ['raw', 'jpeg', 'heic', 'png', 'tiff', 'dng', 'webp'],
     has: ['gps', 'keywords', 'title', 'caption', 'rating', 'label', 'flag', 'album'],
-    is: ['offline', 'online', 'raw', 'pick', 'reject', 'unrated'],
+    is: ['offline', 'online', 'raw', 'pick', 'reject', 'unrated', 'edited'],
     rating: ['>=1', '>=2', '>=3', '>=4', '5', '0']
   }
   if (fixed[key])

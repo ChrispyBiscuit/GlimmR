@@ -39,7 +39,7 @@ export const Tile = memo(function Tile({ photo, width, height, selected, focused
     >
       {!failed && (
         <img
-          src={thumbUrl(photo.id, photo.mtime)}
+          src={thumbUrl(photo.id, photo.rev)}
           width={Math.round(width)}
           height={Math.round(height)}
           loading="lazy"

@@ -4,6 +4,8 @@ import { app, dialog, net, shell, type BrowserWindow } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
 import { getPhotos, openDb } from './db'
+import sharp from 'sharp'
+import { rotateEdit } from '../shared/edit'
 import { Library } from './library'
 import { scanRoot } from './scanner'
 import { SORT_FIELDS } from './query'
@@ -11,9 +13,9 @@ import { findSidecar } from './metadata'
 import { detectEditors, editorFor, launchEditor, mergeEditors } from './editors'
 import { createBackup, listBackups, mirroredRootPath, readBackup, restoreCatalogFile, verifyBackup } from './backup'
 import type { Api } from '../shared/api'
-import type { Editor, JobProgress } from '../shared/types'
+import type { Editor, Histogram, JobProgress } from '../shared/types'
 import { Updater } from './updater'
-import { previewPaths } from './previews'
+import { generatePreviews, previewPaths } from './previews'
 import { MODEL, Tagger } from './tagging/tagger'
 import { tagsFor, VOCABULARY_VERSION } from './tagging/rules'
 import { appliedVocabulary, clearTags, embeddedIds, hideTag, pendingTagIds, retagFromEmbeddings, saveTagResults, setAppliedVocabulary, tagCounts } from './tagging/store'
@@ -240,8 +242,44 @@ export class AppContext {
   }
 }
 
+/** RGB and luminance histograms of an image, with clipping. A thumbnail has plenty of pixels for this. */
+async function histogramOf(file: string): Promise<Histogram> {
+  const { data, info } = await sharp(file).removeAlpha().toColourspace('srgb').raw().toBuffer({ resolveWithObject: true })
+  const r = new Array(256).fill(0)
+  const g = new Array(256).fill(0)
+  const b = new Array(256).fill(0)
+  const l = new Array(256).fill(0)
+  let low = 0
+  let high = 0
+  let sum = 0
+  const n = info.width * info.height
+  for (let i = 0; i < data.length; i += info.channels) {
+    const R = data[i]
+    const G = data[i + 1]
+    const B = data[i + 2]
+    r[R]++
+    g[G]++
+    b[B]++
+    const Y = Math.round(0.2126 * R + 0.7152 * G + 0.0722 * B)
+    l[Y]++
+    sum += Y
+    if (R === 0 || G === 0 || B === 0) low++
+    if (R === 255 || G === 255 || B === 255) high++
+  }
+  return { r, g, b, l, shadowClip: low / n, highlightClip: high / n, mean: sum / n }
+}
+
 export function createApi(ctx: AppContext): Api {
   const lib = (): Library => ctx.library
+  /** Re-renders a photo's previews after its edit changed. */
+  const rerender = async (id: number): Promise<void> => {
+    const [p] = lib().photos([id])
+    if (!p || p.offline) return
+    // What's in the frame may have changed, so the photo is tagged again from its new thumbnail.
+    lib().db.prepare('DELETE FROM photo_embeddings WHERE photo_id = ?').run(id)
+    const { exif_orientation } = lib().db.prepare('SELECT exif_orientation FROM photos WHERE id = ?').get(id) as { exif_orientation: number }
+    await generatePreviews(p.path, p.ext, exif_orientation, previewPaths(ctx.cacheDir, id), p.edit)
+  }
   const pickFolder = async (title: string): Promise<string | null> => {
     const r = await dialog.showOpenDialog(ctx.window!, { title, properties: ['openDirectory', 'createDirectory'] })
     return r.canceled ? null : r.filePaths[0]
@@ -394,6 +432,33 @@ export function createApi(ctx: AppContext): Api {
     setTitleBarTheme: (theme) => {
       if (process.platform === 'darwin' || !ctx.window || ctx.window.isDestroyed()) return
       ctx.window.setTitleBarOverlay({ ...TITLE_BAR[theme], height: TITLE_BAR.height })
+    },
+
+    setEdit: async (id, edit) => {
+      lib().setEdit(id, edit)
+      await rerender(id)
+      ctx.emit('library-changed')
+      void ctx.tagLibrary()
+      return lib().photos([id])[0] ?? null
+    },
+    rotatePhotos: async (ids, dir) => {
+      for (const p of lib().photos(ids)) {
+        if (p.offline) continue
+        lib().setEdit(p.id, rotateEdit(p.edit, dir))
+        await rerender(p.id)
+      }
+      ctx.emit('library-changed')
+      void ctx.tagLibrary()
+    },
+    histogram: async (id) => {
+      const [p] = lib().photos([id])
+      if (!p) return null
+      const paths = previewPaths(ctx.cacheDir, id)
+      try {
+        return histogramOf(fs.existsSync(paths.thumb) ? paths.thumb : paths.preview)
+      } catch {
+        return null
+      }
     },
 
     trashPhotos: async (ids) => {

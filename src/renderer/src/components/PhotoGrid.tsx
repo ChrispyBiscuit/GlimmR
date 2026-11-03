@@ -109,6 +109,16 @@ export function PhotoGrid() {
   const scrollToPhoto = useCallback((i: number) => virtual.scrollToIndex(rowOf[i], { align: 'auto' }), [virtual, rowOf])
   const openViewer = useCallback((index: number) => s.setViewer({ ids: s.ids, index, slideshow: false }), [s])
 
+  /** Turns photos a quarter, then refreshes their tiles (the grid re-flows from the new shapes). */
+  const rotate = async (ids: number[], dir: 1 | -1): Promise<void> => {
+    await api.rotatePhotos(ids, dir)
+    s.putPhotos(await api.photos(ids))
+  }
+  const resetEdits = async (ids: number[]): Promise<void> => {
+    for (const id of ids) await api.setEdit(id, null)
+    s.putPhotos(await api.photos(ids))
+  }
+
   const onTileClick = (index: number, e: React.MouseEvent): void => {
     const id = s.ids[index]
     const next = new Set(s.selected)
@@ -182,6 +192,10 @@ export function PhotoGrid() {
         return openViewer(f)
       }
       if (e.key === 'Escape') return s.setSelected(new Set())
+      if ((e.key === '[' || e.key === ']') && !mod && s.targets.length) {
+        e.preventDefault()
+        return void rotate(s.targets, e.key === ']' ? 1 : -1)
+      }
       if ((e.key === 'Delete' || e.key === 'Backspace') && s.targets.length) {
         e.preventDefault()
         return void s.trashPhotos(s.targets)
@@ -341,6 +355,14 @@ export function PhotoGrid() {
             </ContextMenuItem>
           )}
           <ContextMenuItem onSelect={() => void api.writeXmp(menuIds)}>Save Marks to XMP Sidecar</ContextMenuItem>
+          <ContextMenuSeparator />
+          <ContextMenuItem onSelect={() => void rotate(menuIds, -1)}>
+            Rotate Left<ContextMenuShortcut>[</ContextMenuShortcut>
+          </ContextMenuItem>
+          <ContextMenuItem onSelect={() => void rotate(menuIds, 1)}>
+            Rotate Right<ContextMenuShortcut>]</ContextMenuShortcut>
+          </ContextMenuItem>
+          {menuIds.some((i) => s.cache.get(i)?.edit) && <ContextMenuItem onSelect={() => void resetEdits(menuIds)}>Reset Crop &amp; Rotation</ContextMenuItem>}
           <ContextMenuSeparator />
           <ContextMenuItem variant="destructive" onSelect={() => void s.trashPhotos(menuIds)}>
             Move to {mac ? 'Trash' : 'Recycle Bin'}…<ContextMenuShortcut>{mac ? '⌫' : 'Del'}</ContextMenuShortcut>
