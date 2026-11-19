@@ -9,6 +9,12 @@ edit photos.
 
 - **Your files stay where they are.** Add folders; Glimmr catalogs them in place and never moves, renames or
   modifies originals.
+- **Every common format.** JPEG, HEIC/HEIF (iPhone, and Canon/Fujifilm/Sony `.hif`), AVIF, JPEG XL, PNG, TIFF, WebP,
+  GIF, BMP and Photoshop (PSD/PSB), plus raw files from every major maker: Canon (CR3, CR2, CRW), Nikon (NEF, NRW),
+  Sony (ARW, SRF, SR2), Fujifilm (RAF), Olympus/OM System (ORF), Panasonic (RW2, RAW), Leica (RWL), Pentax (PEF),
+  Samsung (SRW), Sigma (X3F), Hasselblad (3FR, FFF), Phase One (IIQ), GoPro (GPR), Adobe DNG and older Kodak,
+  Minolta, Mamiya, Leaf, Epson and Sinar formats. Filter by file type, or search `type:raw`, `type:cr3`,
+  `-type:jpeg`.
 - **Search by anything.** Free text over every field, plus `camera:"X-T5"`, `iso:>1600`, `focal:24..70`,
   `date:2019-07`, `rating:>=4`, `-keyword:test`, and any raw EXIF/IPTC/XMP key such as `ExposureProgram:Manual`.
   Sort by any field too.
@@ -149,9 +155,16 @@ Electron main (Node)                                    Renderer (React + shadcn
 - **Catalog**: `photos` (normalized fields), `metadata` (every EXIF/IPTC/XMP key/value, numeric values typed for
   comparisons and sorting), `keywords` (hierarchical, `Places>Portugal>Lisbon`), `albums`, `smart_albums`,
   `settings`, and a full-text index over all text.
-- **Previews**: RAW files are never decoded. Glimmr extracts the largest embedded JPEG, which is why browsing
-  RAW is fast. HEIC falls back to the embedded thumbnail, or to `sips` on macOS. Formats Chromium can't display
-  are viewed through 2560 px previews; JPEG, PNG, WebP and AVIF show the original at 100% zoom.
+- **Formats** (`src/shared/formats.ts`): one table of every format, its extensions and whether it's raw, used by
+  the scanner, `type:` searches, the File type filter and editor rules.
+- **Previews**: RAW files are never decoded. Glimmr extracts the largest embedded JPEG that libjpeg can read (not
+  the lossless-JPEG sensor data in CR2s and many DNGs), which is why browsing RAW is fast; Sigma X3F previews come
+  from the file's own section directory. sharp reads JPEG, PNG, WebP, AVIF, TIFF and GIF. The rest are decoded by
+  Glimmr (`src/main/decode`) on worker threads, so the app stays responsive: HEIC with libheif compiled to
+  WebAssembly (`libheif-js`, LGPL; keeps the embedded Display P3 profile), JPEG XL with `jxl-oxide-wasm`, and
+  Photoshop (the saved composite, any depth, RGB/grey/CMYK/Lab/indexed, with its ICC profile) and BMP (every bit
+  depth, bit fields, RLE) with small built-in readers. Formats Chromium can't display are viewed through 2560 px
+  previews; JPEG, PNG, WebP and AVIF show the original at 100% zoom.
 - **Your data**: the catalog lives in the app-data folder (`%APPDATA%\Glimmr\Library` or
   `~/Library/Application Support/Glimmr/Library`). Previews are a disposable cache.
 - **Smart tags**: the CLIP ViT-B/16 image encoder runs through ONNX Runtime on thumbnails, in the background after

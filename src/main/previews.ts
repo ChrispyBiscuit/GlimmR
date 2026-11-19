@@ -1,4 +1,5 @@
-// Thumbnail and preview generation. RAW files are never decoded: the largest embedded JPEG is used.
+// Thumbnail and preview generation. RAW files are never decoded: the largest embedded JPEG is used. Formats sharp
+// can't read (HEIC, JPEG XL, Photoshop, BMP) go through Glimmr's own decoders on worker threads.
 
 import fs from 'node:fs'
 import path from 'node:path'
@@ -7,6 +8,9 @@ import { promisify } from 'node:util'
 import os from 'node:os'
 import sharp, { type OutputInfo, type Sharp } from 'sharp'
 import { RAW_EXTS, readExifThumbnail } from './metadata'
+import { decodeFile, hasDecoder, type Decoded } from './decode'
+import { x3fPreview } from './decode/x3f'
+import { attachIccToPng } from './print/compose'
 import { effectiveCrop, fitCrop, frameSize, isEdited, type PhotoEdit } from '../shared/edit'
 
 sharp.concurrency(Math.max(1, Math.min(4, os.cpus().length - 1)))
@@ -47,35 +51,40 @@ export function largestEmbeddedJpeg(buf: Buffer): Buffer | null {
       i++
       continue
     }
-    const end = jpegEnd(buf, i)
+    const { end, decodable } = jpegEnd(buf, i)
     if (end > 0) {
-      if (!best || end - i > best[1] - best[0]) best = [i, end]
+      // Raw sensor data is often lossless JPEG (Canon CR2, many DNGs): bigger than the preview, but not a picture.
+      if (decodable && (!best || end - i > best[1] - best[0])) best = [i, end]
       i = end
     } else i += 2
   }
   return best ? buf.subarray(best[0], best[1]) : null
 }
 
-/** Returns the offset just past EOI for a JPEG starting at `start`, or -1 if it is not well-formed. */
-function jpegEnd(buf: Buffer, start: number): number {
+/**
+ * Finds the end of a JPEG starting at `start`: the offset just past EOI, or -1 if it is not well-formed. `decodable`
+ * is false for frame types libjpeg can't read, such as lossless (SOF3), which cameras use for sensor data.
+ */
+function jpegEnd(buf: Buffer, start: number): { end: number; decodable: boolean } {
   let p = start + 2
-  let sawFrame = false
+  let frame = -1
+  const done = (end: number): { end: number; decodable: boolean } => ({ end, decodable: frame >= 0xc0 && frame <= 0xc2 })
   while (p < buf.length - 1) {
-    if (buf[p] !== 0xff) return -1
+    if (buf[p] !== 0xff) return done(-1)
     let marker = buf[p + 1]
     while (marker === 0xff && p < buf.length - 2) {
       p++
       marker = buf[p + 1]
     }
-    if (marker === 0xd9) return sawFrame ? p + 2 : -1
+    if (marker === 0xd9) return done(frame >= 0 ? p + 2 : -1)
     if (marker >= 0xd0 && marker <= 0xd7) {
       p += 2
       continue
     }
-    if (p + 3 >= buf.length) return -1
+    if (p + 3 >= buf.length) return done(-1)
     const len = buf.readUInt16BE(p + 2)
-    if (len < 2) return -1
-    if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) sawFrame = true
+    if (len < 2) return done(-1)
+    if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc && frame < 0) frame = marker
     p += 2 + len
     if (marker === 0xda) {
       // Entropy-coded data: runs until a marker that is not a stuffed byte or restart marker.
@@ -92,7 +101,7 @@ function jpegEnd(buf: Buffer, start: number): number {
       }
     }
   }
-  return -1
+  return done(-1)
 }
 
 // Cameras only produce rotated orientations; mirrored ones (2, 4, 5, 7) are left as stored.
@@ -104,6 +113,10 @@ const execFileP = promisify(execFile)
 export async function sourceFor(file: string, ext: string, exifOrientation: number): Promise<{ input: Buffer | string; orientation: number | 'auto' }> {
   if (RAW_EXTS.has(ext)) {
     const buf = await fs.promises.readFile(file)
+    if (ext === 'x3f') {
+      const x = x3fPreview(buf)
+      if (x) return { input: await decodedInput(x), orientation: x.encoded ? 'auto' : exifOrientation }
+    }
     const jpeg = largestEmbeddedJpeg(buf)
     const meta = jpeg ? await sharp(jpeg).metadata().catch(() => null) : null
     // Tiny EXIF thumbnails look bad scaled up; prefer decoding the file when that is all there is.
@@ -122,21 +135,54 @@ export async function sourceFor(file: string, ext: string, exifOrientation: numb
     if (jpeg && meta) return { input: jpeg, orientation: exifOrientation }
     throw new Error('No preview available in RAW file')
   }
+  if (hasDecoder(ext)) {
+    try {
+      // Decoders return upright pixels (libheif applies the file's rotation), so no further turn.
+      const d = await decodeFile(file, ext)
+      return { input: await decodedInput(d), orientation: d.encoded ? 'auto' : 1 }
+    } catch (e) {
+      if (!/^(heic|heif|hif)$/.test(ext) || process.platform !== 'darwin') {
+        const thumb = await readExifThumbnail(file).catch(() => null)
+        if (thumb) return { input: thumb, orientation: exifOrientation }
+        throw e
+      }
+      // macOS can always convert HEIC itself.
+      return { input: await sipsJpeg(file), orientation: 'auto' }
+    }
+  }
   try {
     await sharp(file).metadata()
     return { input: file, orientation: 'auto' }
   } catch (e) {
-    if ((ext === 'heic' || ext === 'heif') && process.platform === 'darwin') {
-      const out = path.join(os.tmpdir(), `glimmr-${process.pid}-${Date.now()}.jpg`)
-      await execFileP('sips', ['-s', 'format', 'jpeg', file, '--out', out])
-      const data = await fs.promises.readFile(out)
-      fs.promises.rm(out, { force: true })
-      return { input: data, orientation: 'auto' }
-    }
     const thumb = await readExifThumbnail(file)
     if (thumb) return { input: thumb, orientation: exifOrientation }
     throw e
   }
+}
+
+async function sipsJpeg(file: string): Promise<Buffer> {
+  const out = path.join(os.tmpdir(), `glimmr-${process.pid}-${Date.now()}.jpg`)
+  await execFileP('sips', ['-s', 'format', 'jpeg', file, '--out', out])
+  const data = await fs.promises.readFile(out)
+  void fs.promises.rm(out, { force: true })
+  return data
+}
+
+/** Decoded pixels as an image sharp reads with its colour profile: an uncompressed PNG tagged with the ICC. */
+async function decodedInput(d: Decoded): Promise<Buffer> {
+  if (d.encoded) return Buffer.from(d.encoded.buffer, d.encoded.byteOffset, d.encoded.byteLength)
+  const png = await sharp(Buffer.from(d.data.buffer, d.data.byteOffset, d.data.byteLength), { raw: { width: d.width, height: d.height, channels: d.channels }, limitInputPixels: false })
+    .png({ compressionLevel: 0 })
+    .toBuffer()
+  return d.icc ? attachIccToPng(png, Buffer.from(d.icc)) : png
+}
+
+/** Pixel size after the pipeline's rotation. */
+async function uprightSize(input: Buffer | string, orientation: number | 'auto'): Promise<{ width: number; height: number } | null> {
+  const m = await sharp(input, { limitInputPixels: false }).metadata().catch(() => null)
+  if (!m?.width || !m.height) return null
+  const quarter = orientation === 'auto' ? (m.orientation ?? 1) >= 5 : ORIENT_ROTATION[orientation] === 90 || ORIENT_ROTATION[orientation] === 270
+  return quarter ? { width: m.height, height: m.width } : { width: m.width, height: m.height }
 }
 
 export function pipeline(input: Buffer | string, orientation: number | 'auto'): Sharp {
@@ -173,13 +219,13 @@ export async function applyEdit(upright: Sharp, e: PhotoEdit): Promise<Sharp> {
   return sharp(turned.data, raw(turned.info)).extract({ left, top, width, height })
 }
 
-const inflight = new Map<string, Promise<void>>()
+const inflight = new Map<string, Promise<{ width: number; height: number } | null>>()
 
 /**
  * Generates a photo's previews: the upright preview, plus the edited one when there's an edit, and the thumbnail
  * from whichever is shown. Concurrent calls for the same photo share one job.
  */
-export function generatePreviews(file: string, ext: string, exifOrientation: number, out: PreviewPaths, edit: PhotoEdit | null = null): Promise<void> {
+export function generatePreviews(file: string, ext: string, exifOrientation: number, out: PreviewPaths, edit: PhotoEdit | null = null): Promise<{ width: number; height: number } | null> {
   const existing = inflight.get(out.thumb)
   if (existing) return existing
   const job = (async () => {
@@ -187,6 +233,8 @@ export function generatePreviews(file: string, ext: string, exifOrientation: num
     for (const f of [out.thumb, out.preview, out.view]) await fs.promises.mkdir(path.dirname(f), { recursive: true })
     const toPreview = (img: Sharp): Promise<Buffer> =>
       img.resize(PREVIEW_SIZE, PREVIEW_SIZE, { fit: 'inside', withoutEnlargement: true }).flatten({ background: '#111' }).jpeg({ quality: 85, mozjpeg: false }).toBuffer()
+    // The upright size of what was decoded, for files whose metadata has none.
+    const size = await uprightSize(input, orientation)
     const preview = await toPreview(pipeline(input, orientation))
     await fs.promises.writeFile(out.preview, preview)
     await fs.promises.rm(out.full, { force: true })
@@ -197,6 +245,7 @@ export function generatePreviews(file: string, ext: string, exifOrientation: num
       await fs.promises.writeFile(out.view, shown)
     } else await fs.promises.rm(out.view, { force: true })
     await sharp(shown).resize(THUMB_SIZE, THUMB_SIZE, { fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 78 }).toFile(out.thumb)
+    return size
   })().finally(() => inflight.delete(out.thumb))
   inflight.set(out.thumb, job)
   return job

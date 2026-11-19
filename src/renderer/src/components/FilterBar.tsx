@@ -10,6 +10,7 @@ import { api } from '../api'
 import { LABEL_COLORS, quoteValue } from '../format'
 import { tokenize } from '../../../shared/tokenize'
 import type { FacetValue, Facets } from '../../../shared/types'
+import { formatById, formatLabel } from '../../../shared/formats'
 
 type ListKey = keyof Omit<Facets, 'ranges'>
 
@@ -72,7 +73,7 @@ export function describeToken(t: string): string {
     if (field === 'rating') text = v === '0' ? 'No rating' : /^\d$/.test(v) ? `${v} stars` : `Rating ${v}`
     else if (field === 'flag') text = v === 'none' ? 'Unflagged' : v === 'pick' ? 'Picked' : 'Rejected'
     else if (field === 'label') text = `${cap(v)} label`
-    else if (field === 'type') text = v === 'raw' ? 'RAW files' : `${v.toUpperCase()} files`
+    else if (field === 'type') text = v === 'raw' ? 'Raw files' : v === 'image' ? 'Non-raw files' : `${formatLabel(formatById(v)?.id ?? v)} files`
     else if (field === 'orientation') text = cap(v)
     else if (field === 'has') text = `Has ${v}`
     else if (field === 'is') text = cap(v)
@@ -186,7 +187,8 @@ export function FilterBar() {
     if (exclude ? !tokens.includes(neg) : !tokens.includes(token)) next = [...next, exclude ? neg : token]
     setTokens(next)
   }
-  const activeFor = (defs: ListDef[]): number => tokens.filter((t) => defs.some((d) => (facets?.[d.key] ?? []).some((f) => [d.token(f.value), `-${d.token(f.value)}`].includes(t)))).length
+  const activeFor = (defs: ListDef[]): number =>
+    tokens.filter((t) => defs.some((d) => [...(facets?.[d.key] ?? []).map((f) => f.value), ...(d.key === 'type' ? ['raw', 'image'] : [])].some((v) => [d.token(v), `-${d.token(v)}`].includes(t)))).length
   const list = (k: string) => <FacetList def={LISTS[k]} values={facets?.[LISTS[k].key] ?? []} tokens={tokens} toggle={toggle} />
   const section = (title: string, body: ReactNode) => (
     <div className="border-b p-1 last:border-b-0">
@@ -194,6 +196,10 @@ export function FilterBar() {
       {body}
     </div>
   )
+  // File types, split into camera raw formats and everything else.
+  const types = facets?.type ?? []
+  const rawTypes = types.filter((f) => formatById(f.value)?.raw)
+  const imageTypes = types.filter((f) => !formatById(f.value)?.raw)
   const rangeTokens = tokens.filter((t) => RANGES.some((r) => t.startsWith(`${r.field}:`) && t.includes('..'))).length
 
   return (
@@ -240,9 +246,13 @@ export function FilterBar() {
             )}
           </div>
         </FilterButton>
-        <FilterButton label="File" active={activeFor([LISTS.type, LISTS.orientation])}>
-          {section('Type', list('type'))}
-          {section('Orientation', list('orientation'))}
+        <FilterButton label="File type" active={activeFor([LISTS.type])} wide>
+          {rawTypes.length > 0 && section('Raw', <FacetList def={LISTS.type} values={[{ value: 'raw', label: 'All raw files', count: rawTypes.reduce((n, f) => n + f.count, 0) }, ...rawTypes]} tokens={tokens} toggle={toggle} />)}
+          {imageTypes.length > 0 && section('Images', <FacetList def={LISTS.type} values={imageTypes} tokens={tokens} toggle={toggle} />)}
+          {!rawTypes.length && !imageTypes.length && <p className="p-3 text-xs text-ink-muted">No photos to filter.</p>}
+        </FilterButton>
+        <FilterButton label="Orientation" active={activeFor([LISTS.orientation])}>
+          {list('orientation')}
         </FilterButton>
       </div>
       {tokens.length > 0 && (

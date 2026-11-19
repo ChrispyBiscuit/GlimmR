@@ -5,15 +5,13 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { normalizeKeyword } from './db'
 import type { ColorLabel, Flag } from '../shared/types'
+import { RAW_EXTS, SUPPORTED_EXTS } from '../shared/formats'
 
-export const RAW_EXTS = new Set([
-  'cr2', 'cr3', 'crw', 'nef', 'nrw', 'arw', 'srf', 'sr2', 'raf', 'orf', 'rw2', 'pef', 'dng', 'srw', '3fr', 'iiq', 'erf', 'x3f', 'mrw', 'kdc', 'dcr', 'rwl'
-])
-export const IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif', 'tif', 'tiff', 'heic', 'heif', 'avif', 'bmp'])
 /** Formats Chromium can show directly; others are viewed through generated previews. */
-export const BROWSER_EXTS = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'bmp'])
+export const BROWSER_EXTS = new Set(['jpg', 'jpeg', 'jpe', 'jfif', 'png', 'webp', 'gif', 'avif'])
 
-export const isSupported = (ext: string): boolean => RAW_EXTS.has(ext) || IMAGE_EXTS.has(ext)
+export { RAW_EXTS }
+export const isSupported = (ext: string): boolean => SUPPORTED_EXTS.has(ext)
 
 export interface MetaEntry {
   key: string
@@ -69,7 +67,8 @@ const PARSE_OPTIONS = {
   jfif: false,
   ihdr: true,
   makerNote: false,
-  userComment: true,
+  // Not `userComment: true`: with it exifr drops tags stored after UserComment, including ExifImageWidth/Height in
+  // Canon CR2 files. The comment is decoded below instead.
   mergeOutput: false,
   translateValues: true,
   reviveValues: true,
@@ -136,6 +135,22 @@ function flatten(groups: Record<string, any>, into: MetaEntry[], seen: Map<strin
   }
 }
 
+/** EXIF UserComment: an 8-byte character code ("ASCII", "UNICODE", "JIS" or blank) then the text. */
+export function userCommentText(b: Uint8Array): string | null {
+  if (b.length <= 8) return null
+  const code = Buffer.from(b.subarray(0, 8)).toString('latin1').replace(/\0+$/, '')
+  const body = Buffer.from(b.subarray(8))
+  let s: string
+  if (code === 'UNICODE') {
+    const even = body.subarray(0, body.length & ~1)
+    // Byte order follows the file; most cameras and editors write little-endian, guess from the zero bytes.
+    const le = even.length > 1 && even[1] === 0 && even[0] !== 0
+    s = le ? even.toString('utf16le') : Buffer.from(even).swap16().toString('utf16le')
+  } else s = body.toString('utf8')
+  s = s.replace(/\0/g, '').trim()
+  return s || null
+}
+
 const first = (groups: Record<string, any>[], ...keys: string[]): unknown => {
   for (const g of groups) {
     if (!g) continue
@@ -182,6 +197,11 @@ export async function readMetadata(file: string): Promise<ExtractedMeta> {
     emb = ((await exifr.parse(file, PARSE_OPTIONS as any)) as Record<string, any>) ?? {}
   } catch {
     emb = {}
+  }
+  if (emb.exif?.UserComment instanceof Uint8Array) {
+    const text = userCommentText(emb.exif.UserComment)
+    if (text) emb.exif.UserComment = text
+    else delete emb.exif.UserComment
   }
 
   const entries: MetaEntry[] = []

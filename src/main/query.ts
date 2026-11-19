@@ -12,6 +12,7 @@
 import type { Db } from './db'
 import type { Facets, FacetValue, Scope, SortSpec, Suggestion } from '../shared/types'
 import { tokenize } from '../shared/tokenize'
+import { FORMATS, findFormat, formatIdSql, formatLabel } from '../shared/formats'
 
 export { tokenize }
 
@@ -149,7 +150,7 @@ export const FIELD_HELP: Record<string, string> = {
   date: 'Date taken: 2023, 2023-05, 2023-05-14 or ranges',
   year: 'Year taken',
   month: 'Month taken (1–12 or name)',
-  type: 'raw, jpeg, heic, png, tiff…',
+  type: 'raw, image, or a format: jpeg, heic, cr3, nef, psd…',
   orientation: 'landscape, portrait or square',
   file: 'File name',
   title: 'Title',
@@ -169,16 +170,6 @@ function parseMonth(v: string): number | null {
   if (Number.isInteger(n) && n >= 1 && n <= 12) return n
   const i = MONTHS.indexOf(v.slice(0, 3).toLowerCase())
   return i >= 0 ? i + 1 : null
-}
-
-const RAW_EXTS = ['cr2', 'cr3', 'crw', 'nef', 'nrw', 'arw', 'srf', 'sr2', 'raf', 'orf', 'rw2', 'pef', 'dng', 'srw', '3fr', 'iiq', 'erf', 'x3f', 'mrw', 'kdc', 'dcr', 'raw', 'rwl']
-const TYPE_ALIASES: Record<string, string[]> = {
-  jpeg: ['jpg', 'jpeg'],
-  jpg: ['jpg', 'jpeg'],
-  heic: ['heic', 'heif'],
-  heif: ['heic', 'heif'],
-  tiff: ['tif', 'tiff'],
-  tif: ['tif', 'tiff']
 }
 
 /** Parses 2023 / 2023-05 / 2023-05-14 into a local-time [start, end) epoch-ms range. */
@@ -238,7 +229,7 @@ function buildTerm(t: Term): Built | string {
     case 'type': {
       if (v === 'raw') return { sql: "(p.kind = 'raw')", params: [] }
       if (v === 'image' || v === 'nonraw') return { sql: "(p.kind = 'image')", params: [] }
-      const exts = TYPE_ALIASES[v] ?? [v.replace(/^\./, '')]
+      const exts = findFormat(v)?.exts ?? [v.replace(/^\./, '')]
       return { sql: `(p.ext IN (${exts.map(() => '?').join(',')}))`, params: exts }
     }
     case 'flag':
@@ -477,13 +468,13 @@ export function computeFacets(db: Db, where: Where): Facets {
   const flagRows = db
     .prepare(`SELECT COALESCE(p.flag, 'none') AS v, COUNT(*) AS c FROM photos p JOIN temp.facet_ids f ON f.id = p.id GROUP BY v`)
     .all() as { v: string; c: number }[]
-  const type = group("CASE WHEN p.kind = 'raw' THEN 'raw' WHEN p.ext IN ('jpg','jpeg') THEN 'jpeg' WHEN p.ext IN ('heic','heif') THEN 'heic' WHEN p.ext IN ('tif','tiff') THEN 'tiff' ELSE p.ext END")
+  const type = group(formatIdSql('p.ext'), 200)
   const result: Facets = {
     year: group('substr(p.taken_day, 1, 4)', 100, 'v DESC'),
     camera: group(CAMERA_EXPR),
     lens: group('p.lens'),
     keyword,
-    type: type.map((t) => ({ ...t, label: t.value.toUpperCase() })),
+    type: type.map((t) => ({ ...t, label: formatLabel(t.value) })),
     rating,
     flag: flagRows.map((r) => ({ value: r.v, label: r.v === 'pick' ? 'Picked' : r.v === 'reject' ? 'Rejected' : 'Unflagged', count: r.c })),
     label: group('p.label'),
@@ -575,7 +566,7 @@ export function suggest(db: Db, input: string): Suggestion[] {
     flag: ['pick', 'reject', 'none'],
     label: ['red', 'yellow', 'green', 'blue', 'purple', 'none'],
     orientation: ['landscape', 'portrait', 'square'],
-    type: ['raw', 'jpeg', 'heic', 'png', 'tiff', 'dng', 'webp'],
+    type: ['raw', 'image', ...FORMATS.map((f) => f.id)],
     has: ['gps', 'keywords', 'title', 'caption', 'rating', 'label', 'flag', 'album'],
     is: ['offline', 'online', 'raw', 'pick', 'reject', 'unrated', 'edited'],
     rating: ['>=1', '>=2', '>=3', '>=4', '5', '0']

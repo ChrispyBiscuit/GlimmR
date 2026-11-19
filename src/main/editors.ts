@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { spawn } from 'node:child_process'
 import type { Editor, EditorSettings } from '../shared/types'
-import { RAW_EXTS } from './metadata'
+import { RAW_EXTS, formatOfExt } from '../shared/formats'
 
 interface Candidate {
   id: string
@@ -153,7 +153,9 @@ export function mergeEditors(saved: EditorSettings, detected: Editor[]): EditorS
 }
 
 export function editorFor(settings: EditorSettings, ext: string): Editor | null {
-  const byType = settings.perType[ext] ?? (RAW_EXTS.has(ext) ? settings.perType.raw : undefined)
+  // Rules are saved by extension (jpg, tif…) or format; .jpeg uses the jpg rule, .hif the heic one.
+  const f = formatOfExt(ext)
+  const byType = settings.perType[ext] ?? f?.exts.map((e) => settings.perType[e]).find(Boolean) ?? (f ? settings.perType[f.id] : undefined) ?? (RAW_EXTS.has(ext) ? settings.perType.raw : undefined)
   const id = byType ?? settings.defaultEditor
   return settings.editors.find((e) => e.id === id) ?? null
 }

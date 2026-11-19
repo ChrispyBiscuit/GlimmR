@@ -226,7 +226,13 @@ export async function scanRoot(db: Db, rootId: number, rootPath: string, opts: S
           }
           try {
             const { edit } = db.prepare('SELECT edit FROM photos WHERE id = ?').get(id!) as { edit: string | null }
-            await generatePreviews(f.abs, f.ext, orientation, previewPaths(opts.cacheDir, id!), parseEdit(edit))
+            const size = await generatePreviews(f.abs, f.ext, orientation, previewPaths(opts.cacheDir, id!), parseEdit(edit))
+            // Formats whose metadata has no pixel size (Photoshop, BMP) get it from the decode. So do raw files whose
+            // metadata only gave a thumbnail's size (some NEFs): the embedded preview is at least that big.
+            if (size)
+              db.prepare(
+                `UPDATE photos SET width = ?, height = ?, orientation = ? WHERE id = ? AND (width IS NULL OR width = 0 OR height IS NULL OR (kind = 'raw' AND width * height < ?))`
+              ).run(size.width, size.height, orientationOf(size.width, size.height), id!, size.width * size.height)
             db.prepare('UPDATE photos SET has_preview = 1, offline = 0 WHERE id = ?').run(id!)
           } catch {
             db.prepare('UPDATE photos SET has_preview = 0 WHERE id = ?').run(id!)

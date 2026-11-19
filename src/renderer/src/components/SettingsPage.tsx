@@ -150,6 +150,7 @@ const TYPES = [
   { key: 'heic', label: 'HEIC' },
   { key: 'tif', label: 'TIFF' },
   { key: 'png', label: 'PNG' },
+  { key: 'psd', label: 'Photoshop (PSD)' },
   { key: 'dng', label: 'DNG' }
 ]
 
