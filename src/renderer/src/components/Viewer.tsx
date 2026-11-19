@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, Crop, Flag, FolderOpen, Info, Pause, Pencil, Play, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, Crop, Flag, FolderOpen, Info, Pause, Pencil, Play, Printer, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
@@ -206,7 +206,7 @@ export function Viewer() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       // The crop tool handles its own keys.
-      if (cropping || isTyping(e) || document.querySelector('[role="menu"], [data-slot="dialog-content"]')) return
+      if (cropping || s.printJob || isTyping(e) || document.querySelector('[role="menu"], [data-slot="dialog-content"]')) return
       // The zoom slider uses the arrow keys itself.
       if ((e.target as HTMLElement)?.closest?.('[role="slider"]') && /^(Arrow|Home|End|Page)/.test(e.key)) return
       const mod = e.metaKey || e.ctrlKey
@@ -237,6 +237,10 @@ export function Viewer() {
       if (mod && e.key.toLowerCase() === 'e') {
         e.preventDefault()
         return void s.openEditor([id])
+      }
+      if (mod && e.key.toLowerCase() === 'p') {
+        e.preventDefault()
+        return s.openPrint([id])
       }
       const u = cullingUpdate(e, photo?.label)
       if (u) {
@@ -406,6 +410,14 @@ export function Viewer() {
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>{photo.offline ? 'The original is offline' : 'Crop and rotate (R)'}</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon-sm" aria-label="Print" onClick={() => s.openPrint([id])}>
+                    <Printer />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Print ({mac ? '⌘P' : 'Ctrl+P'})</TooltipContent>
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>

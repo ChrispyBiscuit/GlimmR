@@ -19,8 +19,11 @@ asarUnpack:
 
 win:
   icon: build/icon.png
-  # ONNX Runtime (smart tags) ships binaries for every platform and architecture; keep only this build's.
+  # Platform-level `files` replaces the top-level list (so it repeats it). ONNX Runtime ships binaries for every
+  # platform and architecture; keep only this build's.
   files:
+    - out/**
+    - package.json
     - '!node_modules/onnxruntime-node/bin/napi-v6/{darwin,linux}/**'
     - '!node_modules/onnxruntime-node/bin/napi-v6/win32/!(${arch})/**'
   target:
@@ -39,6 +42,8 @@ nsis:
 mac:
   icon: build/icon.png
   files:
+    - out/**
+    - package.json
     - '!node_modules/onnxruntime-node/bin/napi-v6/{win32,linux}/**'
     - '!node_modules/onnxruntime-node/bin/napi-v6/darwin/!(${arch})/**'
   category: public.app-category.photography
@@ -57,6 +62,8 @@ dmg:
 linux:
   icon: build/icon.png
   files:
+    - out/**
+    - package.json
     - '!node_modules/onnxruntime-node/bin/napi-v6/{darwin,win32}/**'
     - '!node_modules/onnxruntime-node/bin/napi-v6/linux/!(${arch})/**'
     - '!node_modules/onnxruntime-node/bin/napi-v6/linux/*/libonnxruntime_providers_{cuda,tensorrt}.so'

@@ -13,6 +13,7 @@ import { Browse } from './Browse'
 import { Rediscover } from './Rediscover'
 import { Viewer } from './Viewer'
 import { SettingsPage } from './SettingsPage'
+import { PrintView } from './PrintView'
 
 const mac = navigator.userAgent.includes('Mac')
 
@@ -32,9 +33,9 @@ export function Shell() {
   }
 
   // Back and forward: mouse side buttons, Alt+arrows (Windows) and Cmd+[ / ] (macOS), as in browsers.
-  const { back, forward, viewer } = s
+  const { back, forward, viewer, printJob } = s
   useEffect(() => {
-    if (viewer) return
+    if (viewer || printJob) return
     const onMouse = (e: MouseEvent): void => {
       if (e.button === 3) back()
       if (e.button === 4) forward()
@@ -52,7 +53,7 @@ export function Shell() {
       window.removeEventListener('mouseup', onMouse)
       window.removeEventListener('keydown', onKey)
     }
-  }, [back, forward, viewer])
+  }, [back, forward, viewer, printJob])
 
   const iconButton = (label: string, hint: string, icon: React.ReactNode, onClick: () => void, opts: { disabled?: boolean; pressed?: boolean } = {}) => (
     <Tooltip>
@@ -122,6 +123,7 @@ export function Shell() {
         </div>
       </main>
       {s.viewer && <Viewer />}
+      {s.printJob && <PrintView />}
     </div>
   )
 }

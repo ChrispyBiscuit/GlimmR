@@ -16,7 +16,7 @@ import { api } from '../api'
 import { confirmDialog } from '../dialogs'
 import { fmtBytes, fmtDate, fmtNum } from '../format'
 import { Progress } from '@/components/ui/progress'
-import type { BackupEntry, EditorSettings, SmartTagStatus } from '../../../shared/types'
+import type { BackupEntry, EditorSettings, IccProfile, PrinterInfo, SmartTagStatus } from '../../../shared/types'
 
 const mac = navigator.userAgent.includes('Mac')
 
@@ -25,6 +25,7 @@ const SECTIONS = [
   { key: 'editors', label: 'Editors' },
   { key: 'backup', label: 'Backup' },
   { key: 'smart-tags', label: 'Smart tags' },
+  { key: 'printing', label: 'Printing' },
   { key: 'appearance', label: 'Appearance' },
   { key: 'updates', label: 'Updates' },
   { key: 'help', label: 'Search help' }
@@ -637,6 +638,166 @@ function SmartTagsSection() {
   )
 }
 
+function PrintingSection() {
+  const s = useStore()
+  const [printers, setPrinters] = useState<PrinterInfo[] | null>(null)
+  const [profiles, setProfiles] = useState<IccProfile[] | null>(null)
+  const [display, setDisplay] = useState<{ colorSpace: string; colorDepth: number } | null>(null)
+  const load = (): void => {
+    void api.printers().then(setPrinters)
+    void api.printProfiles().then(setProfiles)
+    void api.displayColor().then(setDisplay)
+  }
+  useEffect(load, [])
+  const presets = s.settings!.print.presets
+  const kinds: Record<IccProfile['kind'], string> = { printer: 'Printer / paper', space: 'Colour space', display: 'Display', other: 'Other' }
+  const state: Record<PrinterInfo['state'], string> = { ready: 'Ready', busy: 'Printing', stopped: 'Paused or needs attention', unknown: '' }
+
+  return (
+    <Page
+      title="Printing"
+      intro="Print from any photo with Ctrl/⌘ P. Here you manage printers, the colour profiles for your papers, and check your printer against your screen with the calibration chart."
+    >
+      <section className="flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-medium">Printers</h2>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={load}>
+              <RefreshCw data-icon="inline-start" />
+              Refresh
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => api.openPrinterSettings()}>
+              Manage Printers…
+            </Button>
+          </div>
+        </div>
+        {printers === null ? (
+          <p className="text-[13px] text-ink-muted">Looking for printers…</p>
+        ) : printers.length === 0 ? (
+          <p className="text-[13px] text-ink-muted">No printers are installed. Add one in your system’s printer settings; PDF and image files work without one.</p>
+        ) : (
+          <ul className="divide-y rounded-md border">
+            {printers.map((p) => (
+              <li key={p.name} className="flex items-center gap-3 px-3 py-2.5 text-[13px]">
+                <span className={cn('size-2 shrink-0 rounded-full', p.state === 'ready' ? 'bg-emerald-500' : p.state === 'stopped' ? 'bg-red-500' : p.state === 'busy' ? 'bg-amber-500' : 'bg-ink-muted/50')} aria-hidden />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium">
+                    {p.displayName}
+                    {p.isDefault && <span className="font-normal text-ink-muted"> · default</span>}
+                  </p>
+                  <p className="truncate text-xs text-ink-muted">{[state[p.state], p.model || p.description, p.location].filter(Boolean).join(' · ')}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-medium">Colour profiles</h2>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={async () => {
+              const p = await api.addPrintProfile()
+              if (p) {
+                toast.success(`Added ${p.name}`)
+                load()
+              }
+            }}
+          >
+            <FolderPlus data-icon="inline-start" />
+            Add Profile…
+          </Button>
+        </div>
+        <p className="text-[13px] leading-relaxed text-ink-muted">
+          Paper makers publish an ICC profile for each paper and printer. Install it with the printer’s software, or add it here. Choose it in the print window to soft proof and to let Glimmr manage colours.
+        </p>
+        {profiles === null ? (
+          <p className="text-[13px] text-ink-muted">Looking for profiles…</p>
+        ) : (
+          <div className="max-h-72 overflow-y-auto rounded-md border">
+            <table className="w-full text-[13px]">
+              <thead className="sticky top-0 bg-panel text-left text-xs text-ink-muted">
+                <tr>
+                  <th className="px-3 py-2 font-normal">Name</th>
+                  <th className="px-3 py-2 font-normal">Type</th>
+                  <th className="px-3 py-2 font-normal">Space</th>
+                  <th className="w-10" />
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {profiles.map((p) => (
+                  <tr key={p.path} title={p.path}>
+                    <td className="max-w-0 truncate px-3 py-1.5">{p.name}</td>
+                    <td className="px-3 py-1.5 text-ink-muted">{kinds[p.kind]}</td>
+                    <td className="px-3 py-1.5 text-ink-muted">{p.space}</td>
+                    <td className="px-1">
+                      {p.source === 'added' && (
+                        <Button
+                          variant="ghost"
+                          size="icon-xs"
+                          aria-label={`Remove ${p.name}`}
+                          onClick={async () => {
+                            await api.removePrintProfile(p.path)
+                            load()
+                          }}
+                        >
+                          <Trash2 />
+                        </Button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <h2 className="text-sm font-medium">Calibration</h2>
+        <Setting
+          label="Calibration chart"
+          description="A test page with a grey wedge, shadow and highlight steps, gradients, colour and skin-tone patches and fine lines. Print it on your usual paper and compare it with the screen: every step should be distinct, greys neutral and gradients smooth."
+        >
+          <Button size="sm" onClick={() => s.openPrintChart()}>
+            Print Chart…
+          </Button>
+        </Setting>
+        <Setting
+          label="Screen"
+          description={`Glimmr shows colours in your display’s colour space${display ? ` (${display.colorSpace}, ${display.colorDepth}-bit)` : ''}. For prints to match, calibrate the screen with a hardware colorimeter (such as Calibrite or Datacolor) and set its brightness to about 100–120 cd/m² for print work. If prints still look dark, use Print adjustment in the print window.`}
+        >
+          {null}
+        </Setting>
+      </section>
+
+      {presets.length > 0 && (
+        <section className="flex flex-col gap-3">
+          <h2 className="text-sm font-medium">Your print presets</h2>
+          <ul className="divide-y rounded-md border">
+            {presets.map((p) => (
+              <li key={p.name} className="flex items-center justify-between px-3 py-2 text-[13px]">
+                {p.name}
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-label={`Delete ${p.name}`}
+                  onClick={() => void s.setSettings({ print: { ...s.settings!.print, presets: presets.filter((x) => x.name !== p.name) } })}
+                >
+                  <Trash2 />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </Page>
+  )
+}
+
 const HELP: [string, string][] = [
   ['sunset beach', 'Words match file and folder names, keywords, titles, captions, cameras, lenses, albums and every text metadata value. Partial words work: lisb finds Lisbon.'],
   ['"golden hour"', 'An exact phrase.'],
@@ -703,7 +864,7 @@ function HelpSection() {
 export function SettingsPage() {
   const s = useStore()
   if (!s.settings) return null
-  const Section = { library: LibrarySection, editors: EditorsSection, backup: BackupSection, 'smart-tags': SmartTagsSection, appearance: AppearanceSection, updates: UpdatesSection, help: HelpSection }[s.settingsSection] ?? LibrarySection
+  const Section = { library: LibrarySection, editors: EditorsSection, backup: BackupSection, 'smart-tags': SmartTagsSection, printing: PrintingSection, appearance: AppearanceSection, updates: UpdatesSection, help: HelpSection }[s.settingsSection] ?? LibrarySection
   return (
     <div className="flex h-full flex-col">
       <div className="flex min-h-0 flex-1">

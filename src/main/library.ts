@@ -34,7 +34,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autoAdvance: false,
   editors: { editors: [], defaultEditor: null, perType: {} },
   backup: { destination: null, schedule: 'off', keep: 10, includeOriginals: false, lastBackupAt: null },
-  smartTags: { enabled: false }
+  smartTags: { enabled: false },
+  print: { last: {}, presets: [] }
 }
 
 export class Library {
@@ -53,7 +54,8 @@ export class Library {
       ...saved,
       editors: { ...DEFAULT_SETTINGS.editors, ...saved.editors },
       backup: { ...DEFAULT_SETTINGS.backup, ...saved.backup },
-      smartTags: { ...DEFAULT_SETTINGS.smartTags, ...saved.smartTags }
+      smartTags: { ...DEFAULT_SETTINGS.smartTags, ...saved.smartTags },
+      print: { ...DEFAULT_SETTINGS.print, ...saved.print }
     }
   }
 

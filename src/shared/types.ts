@@ -1,4 +1,5 @@
 import type { PhotoEdit } from './edit'
+import type { PrintPreset, PrintSettings } from './print'
 
 // Types shared by the main process, preload and renderer.
 
@@ -196,6 +197,29 @@ export interface AppSettings {
   editors: EditorSettings
   backup: BackupSettings
   smartTags: { enabled: boolean }
+  /** Last-used print settings and saved presets. */
+  print: { last: Partial<PrintSettings>; presets: PrintPreset[] }
+}
+
+export interface IccProfile {
+  path: string
+  name: string
+  /** ICC device class: printer (paper) profiles, colour spaces, displays. */
+  kind: 'printer' | 'space' | 'display' | 'other'
+  space: 'RGB' | 'CMYK'
+  /** Installed with the system or a printer driver, or added in Glimmr. */
+  source: 'system' | 'added'
+}
+
+export interface PrinterInfo {
+  /** The system name, used to print. */
+  name: string
+  displayName: string
+  description: string
+  isDefault: boolean
+  state: 'ready' | 'busy' | 'stopped' | 'unknown'
+  location: string
+  model: string
 }
 
 /** Per-channel counts in 256 bins, from the image as shown (edits applied). */
@@ -253,7 +277,7 @@ export interface RestorePlan {
 
 export interface JobProgress {
   id: string
-  kind: 'scan' | 'backup' | 'restore' | 'xmp' | 'model' | 'tags'
+  kind: 'scan' | 'backup' | 'restore' | 'xmp' | 'model' | 'tags' | 'print'
   label: string
   done: number
   total: number

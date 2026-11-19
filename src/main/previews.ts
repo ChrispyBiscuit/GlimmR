@@ -101,7 +101,7 @@ const ORIENT_ROTATION: Record<number, number> = { 3: 180, 6: 90, 8: 270 }
 const execFileP = promisify(execFile)
 
 /** Produces a decodable source buffer for a file, plus the orientation still to apply. */
-async function sourceFor(file: string, ext: string, exifOrientation: number): Promise<{ input: Buffer | string; orientation: number | 'auto' }> {
+export async function sourceFor(file: string, ext: string, exifOrientation: number): Promise<{ input: Buffer | string; orientation: number | 'auto' }> {
   if (RAW_EXTS.has(ext)) {
     const buf = await fs.promises.readFile(file)
     const jpeg = largestEmbeddedJpeg(buf)
@@ -139,7 +139,7 @@ async function sourceFor(file: string, ext: string, exifOrientation: number): Pr
   }
 }
 
-function pipeline(input: Buffer | string, orientation: number | 'auto'): Sharp {
+export function pipeline(input: Buffer | string, orientation: number | 'auto'): Sharp {
   let img = sharp(input, { failOn: 'none', limitInputPixels: false })
   if (orientation === 'auto') img = img.rotate()
   else if (ORIENT_ROTATION[orientation]) img = img.rotate(ORIENT_ROTATION[orientation])

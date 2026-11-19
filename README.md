@@ -22,6 +22,15 @@ edit photos.
 - **Technical detail.** A live RGB/luminance histogram with clipping warnings, plus exposure value, 35 mm
   equivalent and crop factor, field of view, metering, flash, white balance, colour space and profile, bit depth,
   serial numbers and more, with EXIF codes shown as words.
+- **Print like a pro.** `Ctrl/⌘ P` opens a print workspace with a live page preview:
+  - **Layouts:** single photos, grids and contact sheets, or print sizes packed on a page.
+  - **Cropping and borders:** fit or fill, with drag-to-crop; borders, strokes and crop marks.
+  - **Text:** captions, header and footer, watermark.
+  - **Quality:** 180–720 ppi, print sharpening for glossy or matte, and print brightness and contrast.
+  - **Colour management** with Little CMS: your paper's ICC profile with any rendering intent and black point
+    compensation, soft proofing, and a gamut warning.
+  - **Output:** any printer, a PDF, or JPEG/TIFF files tagged with the profile for a lab.
+  - **Presets**, a profile manager, and a printable calibration chart.
 - **Open in your editor.** `Ctrl/⌘ E` opens the selection in your default editor, with per-type defaults
   (e.g. RAW → Capture One, JPEG → Photoshop). Editors are detected automatically, and you can add any app.
 - **Backup and restore.** Catalog backups with checksums and SQLite integrity checks, on a schedule with
@@ -155,6 +164,16 @@ Electron main (Node)                                    Renderer (React + shadcn
 - **Edits**: a rotation, straighten angle and crop per photo (`photos.edit`, see `src/shared/edit.ts`). Thumbnails and
   previews are rendered with the edit applied; the unedited upright preview is kept for the crop tool, and 100% zoom
   renders the edited original on demand. Editors are still sent the original file.
+- **Printing** ([research](docs/PRINT_RESEARCH.md), [PRD](docs/PRINT_PRD.md)):
+  - **Layout:** pure geometry in inches (`src/shared/print.ts`) drives the live preview and every output.
+  - **Rendering:** photos are rendered in the main process (`src/main/print`) from the full-resolution original,
+    with the photo's edit, the cell's crop, a Lanczos resample to the exact print size, print adjustment and
+    sharpening.
+  - **Colour:** Little CMS 2.16 as WebAssembly (vendored from lcms-wasm, MIT) handles profile conversion,
+    rendering intents, black point compensation, soft proof and gamut warning. sharp only offers perceptual.
+  - **Output:** printer and PDF use a hidden window printing an exact-size HTML page, so text stays vector. Files
+    are composited at print resolution with the profile embedded but not converted twice.
+  - **Tests:** an end-to-end test prints through a real CUPS printer.
 - **Editors**: Lightroom Classic and Capture One are catalog-based, so opening a file outside their catalog
   shows their import window. Ratings and keywords only reach them through XMP sidecars (Settings → Library →
   *Write XMP*, or *Write XMP* on a selection).
@@ -172,6 +191,7 @@ Electron main (Node)                                    Renderer (React + shadcn
 | `Ctrl/⌘ E` | Open in editor |
 | `Delete` / `Backspace` | Move to the Recycle Bin / Trash (asks first) |
 | `R` | Crop and rotate (viewer); `Enter` saves, `Esc` cancels |
+| `Ctrl/⌘ P` | Print the selection or the current photo |
 | `[` / `]` | Rotate left / right |
 | `S` | Slideshow |
 | `I` | Info panel (viewer) |

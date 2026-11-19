@@ -59,6 +59,8 @@ function useStoreValue() {
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [focusIndex, setFocusIndex] = useState(-1)
   const [viewer, setViewer] = useState<ViewerState | null>(null)
+  /** The print workspace, when open: the photos to print, or the calibration chart. */
+  const [printJob, setPrintJob] = useState<{ ids: number[]; chart?: boolean } | null>(null)
   const [roots, setRoots] = useState<Root[]>([])
   const [albums, setAlbums] = useState<Album[]>([])
   const [smartAlbums, setSmartAlbums] = useState<SmartAlbum[]>([])
@@ -105,6 +107,8 @@ function useStoreValue() {
       if (p.finished) {
         // Jobs can change settings in the main process (e.g. last backup time).
         void api.getSettings().then(setSettingsState)
+        // The print workspace reports its own results.
+        if (p.kind === 'print') return
         if (p.error) toast.error(p.label, { description: p.error, duration: 8000 })
         // Scans and tagging run often in the background; only mention the ones that changed something notable.
         else if (p.kind === 'tags' ? p.total >= 100 : p.kind !== 'scan' || (p.message && !p.message.startsWith('0 new, 0 updated')))
@@ -350,6 +354,12 @@ function useStoreValue() {
     targets,
     viewer,
     setViewer,
+    printJob,
+    openPrint: (ids: number[]): void => {
+      if (ids.length) setPrintJob({ ids })
+    },
+    openPrintChart: () => setPrintJob({ ids: [], chart: true }),
+    closePrint: () => setPrintJob(null),
     roots,
     albums,
     smartAlbums,

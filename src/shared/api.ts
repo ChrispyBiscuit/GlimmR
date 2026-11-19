@@ -19,12 +19,15 @@ import type {
   SearchRequest,
   SearchResult,
   Histogram,
+  IccProfile,
+  PrinterInfo,
   SmartAlbum,
   SmartTagStatus,
   Suggestion,
   UpdateStatus
 } from './types'
 import type { PhotoEdit } from './edit'
+import type { Layout, Placement, PrintSettings } from './print'
 
 export interface Api {
   // library folders
@@ -108,6 +111,20 @@ export interface Api {
   /** Moves photos (and sidecars only they use) to the system trash and removes them from the catalog. */
   trashPhotos(ids: number[]): Promise<{ trashed: number; failed: number; error?: string }>
 
+  // printing
+  printers(): Promise<PrinterInfo[]>
+  printProfiles(): Promise<IccProfile[]>
+  /** Adds an ICC profile (chosen in a dialog) to Glimmr's own profiles. */
+  addPrintProfile(): Promise<IccProfile | null>
+  removePrintProfile(path: string): Promise<void>
+  /** One page of the print preview, each photo rendered at screen resolution (soft-proofed if asked). */
+  printPreview(req: PrintJobRequest, page: number, pxPerInch: number): Promise<{ layout: Layout; cells: { src: string; ppi: number; lowRes: boolean }[] }>
+  /** Prints, or saves a PDF or image files, as the settings say. Runs as a job with progress. */
+  print(req: PrintJobRequest): Promise<{ ok: boolean; message: string; files?: string[] }>
+  openPrinterSettings(): void
+  showFile(path: string): void
+  displayColor(): { colorSpace: string; colorDepth: number }
+
   // smart tags
   smartTagStatus(): SmartTagStatus
   /** Turns smart tags on, downloading the model first if needed, then tags the library in the background. */
@@ -116,6 +133,14 @@ export interface Api {
   /** Turns smart tags off and deletes the model and every smart tag. */
   removeSmartTags(): void
   hideSmartTag(photoId: number, tag: string): void
+}
+
+export interface PrintJobRequest {
+  settings: Partial<PrintSettings>
+  photoIds: number[]
+  placements?: Record<number, Placement>
+  /** Print the calibration chart instead of photos. */
+  chart?: boolean
 }
 
 export type ApiMethod = keyof Api

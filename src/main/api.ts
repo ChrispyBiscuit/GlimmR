@@ -1,11 +1,16 @@
 // Implements the renderer-facing API (src/shared/api.ts) on top of the Library and background jobs.
 
-import { app, dialog, net, shell, type BrowserWindow } from 'electron'
+import { app, dialog, net, screen, shell, type BrowserWindow } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
 import { getPhotos, openDb } from './db'
 import sharp from 'sharp'
 import { rotateEdit } from '../shared/edit'
+import wasmPath from './print/vendor/lcms.wasm?asset'
+import { setWasmSource } from './print/color'
+import { addProfile, listProfiles } from './print/profiles'
+import { previewPage, runOutput } from './print/job'
+import { fontCss, listPrinters, pdfHtml, printHtml } from './print/printer'
 import { Library } from './library'
 import { scanRoot } from './scanner'
 import { SORT_FIELDS } from './query'
@@ -269,8 +274,12 @@ async function histogramOf(file: string): Promise<Histogram> {
   return { r, g, b, l, shadowClip: low / n, highlightClip: high / n, mean: sum / n }
 }
 
+setWasmSource(() => fs.readFileSync(wasmPath))
+
 export function createApi(ctx: AppContext): Api {
   const lib = (): Library => ctx.library
+  const profileDir = (): string => path.join(app.getPath('userData'), 'Profiles')
+  const chartDir = (): string => path.join(ctx.cacheDir, 'print')
   /** Re-renders a photo's previews after its edit changed. */
   const rerender = async (id: number): Promise<void> => {
     const [p] = lib().photos([id])
@@ -482,6 +491,56 @@ export function createApi(ctx: AppContext): Api {
       lib().removePhotos(removed)
       ctx.emit('library-changed')
       return { trashed: removed.length, failed: photos.length - removed.length, error }
+    },
+
+    printers: () => (ctx.window ? listPrinters(ctx.window.webContents) : Promise.resolve([])),
+    printProfiles: () => listProfiles(profileDir()),
+    addPrintProfile: async () => {
+      const r = await dialog.showOpenDialog(ctx.window!, { title: 'Add a printer or paper colour profile', properties: ['openFile'], filters: [{ name: 'ICC profiles', extensions: ['icc', 'icm'] }] })
+      if (r.canceled || !r.filePaths[0]) return null
+      const dest = await addProfile(profileDir(), r.filePaths[0])
+      return (await listProfiles(profileDir())).find((p) => p.path === dest) ?? null
+    },
+    removePrintProfile: async (p) => {
+      // Only profiles Glimmr added can be removed; system ones belong to the OS and printer drivers.
+      if (path.dirname(path.resolve(p)) === path.resolve(profileDir())) fs.rmSync(p, { force: true })
+    },
+    printPreview: (req, page, pxPerInch) => previewPage(lib().db, ctx.cacheDir, chartDir(), req, page, pxPerInch),
+    print: async (req) => {
+      const result = await ctx.runJob('print', req.chart ? 'Printing the calibration chart' : 'Printing', async (report, signal) => {
+        const r = await runOutput(req, {
+          db: lib().db,
+          cacheDir: ctx.cacheDir,
+          chartDir: chartDir(),
+          report,
+          signal,
+          printHtml,
+          pdfHtml,
+          fontCss: fontCss(path.join(__dirname, '../renderer')),
+          chooseTarget: async (kind, suggested) => {
+            const docs = app.getPath('documents')
+            if (kind === 'pdf') {
+              const r = await dialog.showSaveDialog(ctx.window!, { title: 'Save as PDF', defaultPath: path.join(docs, suggested), filters: [{ name: 'PDF', extensions: ['pdf'] }] })
+              return r.canceled ? null : (r.filePath ?? null)
+            }
+            const r = await dialog.showOpenDialog(ctx.window!, { title: 'Choose a folder for the print files', defaultPath: docs, properties: ['openDirectory', 'createDirectory'] })
+            return r.canceled ? null : r.filePaths[0]
+          }
+        }).catch((e: Error) => ({ ok: false, message: e.message }))
+        report(1, 1, r.message)
+        return r
+      })
+      return result ?? { ok: false, message: 'Printing failed.' }
+    },
+    openPrinterSettings: () => {
+      if (process.platform === 'darwin') void shell.openExternal('x-apple.systempreferences:com.apple.Print-Scan-Settings.extension')
+      else if (process.platform === 'win32') void shell.openExternal('ms-settings:printers')
+      else void shell.openExternal('http://localhost:631/printers/')
+    },
+    showFile: (p) => shell.showItemInFolder(p),
+    displayColor: () => {
+      const d = screen.getPrimaryDisplay()
+      return { colorSpace: d.colorSpace, colorDepth: d.colorDepth }
     },
 
     smartTagStatus: () => ({

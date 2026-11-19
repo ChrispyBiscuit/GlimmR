@@ -208,6 +208,10 @@ export function PhotoGrid() {
         e.preventDefault()
         return void s.openEditor(s.targets)
       }
+      if (mod && e.key.toLowerCase() === 'p') {
+        e.preventDefault()
+        return s.openPrint(s.targets)
+      }
       if (e.key.toLowerCase() === 's' && !mod) return s.setViewer({ ids: s.ids, index: Math.max(0, f), slideshow: true })
       const u = cullingUpdate(e, s.cache.get(s.ids[f])?.label)
       if (u && s.targets.length) {
@@ -354,6 +358,9 @@ export function PhotoGrid() {
               Remove from This Album
             </ContextMenuItem>
           )}
+          <ContextMenuItem onSelect={() => s.openPrint(menuIds)}>
+            Print…<ContextMenuShortcut>{mac ? '⌘P' : 'Ctrl+P'}</ContextMenuShortcut>
+          </ContextMenuItem>
           <ContextMenuItem onSelect={() => void api.writeXmp(menuIds)}>Save Marks to XMP Sidecar</ContextMenuItem>
           <ContextMenuSeparator />
           <ContextMenuItem onSelect={() => void rotate(menuIds, -1)}>
