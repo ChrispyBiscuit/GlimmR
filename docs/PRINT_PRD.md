@@ -140,7 +140,7 @@ Print any photos from Glimmr as well as Lightroom Classic or Capture One would, 
 
 ## 14. Status
 
-Printer driver settings (PR-P9, PR-P10) were added after 1.0.8: a printer could feed from the wrong tray, because Chromium's print path only passes
+Printer driver settings (PR-P9, PR-P10) were added in 1.0.9: a printer could feed from the wrong tray, because Chromium's print path only passes
 paper size, copies, duplex and colour. Verified with a three-tray CUPS printer: the job reached CUPS with the chosen
 paper source, media type and quality, the paper's standard name, and no scaling.
 
