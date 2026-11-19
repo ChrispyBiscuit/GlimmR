@@ -24,6 +24,7 @@ import {
   computeLayout,
   fromUnits,
   LOW_PPI,
+  PACKAGE_TEMPLATES,
   PAPERS,
   PPI_CHOICES,
   PRINT_SIZES,
@@ -31,6 +32,7 @@ import {
   withDefaults,
   type CaptionField,
   type Layout,
+  type PackageItem,
   type Placement,
   type PrintPhoto,
   type PrintPreset,
@@ -573,7 +575,7 @@ export function PrintView() {
                   <ToggleGroup type="single" variant="outline" size="sm" value={settings.layout} onValueChange={(v) => v && (set({ layout: v as PrintSettings['layout'] }), setPage(0))} aria-label="Layout">
                     <ToggleGroupItem value="single">Single</ToggleGroupItem>
                     <ToggleGroupItem value="grid">Grid</ToggleGroupItem>
-                    <ToggleGroupItem value="package">Print size</ToggleGroupItem>
+                    <ToggleGroupItem value="package">Print sizes</ToggleGroupItem>
                   </ToggleGroup>
                 </Field>
                 {settings.layout === 'grid' && (
@@ -591,34 +593,97 @@ export function PrintView() {
                 )}
                 {settings.layout === 'package' && (
                   <>
-                    <Field label="Print size">
-                      <Select value={settings.pkg.size} onValueChange={(v) => set({ pkg: { ...settings.pkg, size: v } })}>
-                        <SelectTrigger size="sm" className="w-44" aria-label="Print size">
-                          <SelectValue />
+                    <Field label="Package">
+                      <Select
+                        value=""
+                        onValueChange={(name) => {
+                          const t = PACKAGE_TEMPLATES.find((x) => x.name === name)
+                          // A template is a whole sheet design: its paper and narrow margins come with it.
+                          if (t) set({ paper: t.paper, margins: { top: 0.25, right: 0.25, bottom: 0.25, left: 0.25 }, pkg: { ...settings.pkg, items: t.items.map(([size, count]) => ({ size, w: 4, h: 6, count })) } })
+                        }}
+                      >
+                        <SelectTrigger size="sm" className="w-48" aria-label="Package template">
+                          <SelectValue placeholder="Pick a template…" />
                         </SelectTrigger>
                         <SelectContent>
-                          {PRINT_SIZES.map((p) => (
-                            <SelectItem key={p.id} value={p.id}>
-                              {p.label}
+                          {PACKAGE_TEMPLATES.map((t) => (
+                            <SelectItem key={t.name} value={t.name}>
+                              {t.name}
                             </SelectItem>
                           ))}
-                          <SelectItem value="custom">Custom size</SelectItem>
                         </SelectContent>
                       </Select>
                     </Field>
-                    {settings.pkg.size === 'custom' && (
-                      <Field label="Custom print">
-                        <Length label="Print width" value={settings.pkg.customW} units={units} min={0.5} onChange={(v) => set({ pkg: { ...settings.pkg, customW: v } })} />
-                        <span className="text-xs text-ink-muted">×</span>
-                        <Length label="Print height" value={settings.pkg.customH} units={units} min={0.5} onChange={(v) => set({ pkg: { ...settings.pkg, customH: v } })} />
-                      </Field>
-                    )}
-                    <Field label="Copies of each photo">
-                      <NumberBox label="Copies of each photo" value={settings.pkg.repeat} min={1} max={64} onChange={(v) => set({ pkg: { ...settings.pkg, repeat: Math.round(v) } })} />
-                    </Field>
+                    <div className="flex flex-col gap-1.5">
+                      <span className="text-xs text-ink-muted">Prints of each photo</span>
+                      {settings.pkg.items.map((item, i) => {
+                        const update = (patch: Partial<PackageItem>): void => set({ pkg: { ...settings.pkg, items: settings.pkg.items.map((x, k) => (k === i ? { ...x, ...patch } : x)) } })
+                        return (
+                          <div key={i} className="flex flex-col gap-1">
+                            <div className="flex items-center gap-1.5">
+                              <Select value={item.size} onValueChange={(v) => update({ size: v })}>
+                                <SelectTrigger size="sm" className="min-w-0 flex-1" aria-label={`Print size ${i + 1}`}>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {PRINT_SIZES.map((p) => (
+                                    <SelectItem key={p.id} value={p.id}>
+                                      {p.label}
+                                    </SelectItem>
+                                  ))}
+                                  <SelectItem value="custom">Custom size</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <span className="text-xs text-ink-muted">×</span>
+                              <NumberBox label={`How many of print size ${i + 1}`} value={item.count} min={1} max={99} onChange={(v) => update({ count: Math.round(v) })} />
+                              <Button
+                                variant="ghost"
+                                size="icon-xs"
+                                aria-label={`Remove print size ${i + 1}`}
+                                disabled={settings.pkg.items.length === 1}
+                                onClick={() => set({ pkg: { ...settings.pkg, items: settings.pkg.items.filter((_, k) => k !== i) } })}
+                              >
+                                <X />
+                              </Button>
+                            </div>
+                            {item.size === 'custom' && (
+                              <div className="flex items-center gap-1.5 pl-1">
+                                <Length label={`Custom print ${i + 1} width`} value={item.w} units={units} min={0.5} onChange={(v) => update({ w: v })} />
+                                <span className="text-xs text-ink-muted">×</span>
+                                <Length label={`Custom print ${i + 1} height`} value={item.h} units={units} min={0.5} onChange={(v) => update({ h: v })} />
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="self-start"
+                        onClick={() => set({ pkg: { ...settings.pkg, items: [...settings.pkg.items, { size: 'wallet', w: 2.5, h: 3.5, count: 4 }] } })}
+                      >
+                        <Plus data-icon="inline-start" />
+                        Add a Size
+                      </Button>
+                      <p className="text-[11px] text-ink-muted">
+                        {(() => {
+                          const prints = settings.pkg.items.reduce((n, i) => n + i.count, 0) * photos.length
+                          return `${prints.toLocaleString()} ${prints === 1 ? 'print' : 'prints'} on ${pages} ${pages === 1 ? 'sheet' : 'sheets'}, arranged so they can be cut apart with straight cuts.`
+                        })()}
+                      </p>
+                    </div>
                     <Field label="Spacing">
                       <Length label="Spacing between prints" value={settings.pkg.gap} units={units} max={2} onChange={(v) => set({ pkg: { ...settings.pkg, gap: v } })} />
                     </Field>
+                    {photos.length > 1 && (
+                      <SwitchField
+                        id="pkg-separate"
+                        label="Each photo on its own sheets"
+                        checked={settings.pkg.separate}
+                        onChange={(v) => set({ pkg: { ...settings.pkg, separate: v } })}
+                        hint={settings.pkg.separate ? 'Each sheet holds one photo’s prints, to hand out separately.' : 'Photos share sheets to save paper.'}
+                      />
+                    )}
                   </>
                 )}
                 <Field label="Photos" hint={settings.fit === 'fill' ? 'Drag a photo in the preview to choose its crop, scroll to zoom, double-click to reset.' : undefined}>

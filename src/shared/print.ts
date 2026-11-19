@@ -39,13 +39,38 @@ export const PAPERS: Paper[] = [
 
 /** Print sizes for picture packages (portrait, inches). */
 export const PRINT_SIZES: Paper[] = [
+  { id: 'passport', label: 'Passport (2 × 2 in)', w: 2, h: 2 },
+  { id: 'passport-eu', label: 'Passport (35 × 45 mm)', w: mm(35), h: mm(45) },
+  { id: 'wallet-small', label: 'Wallet (2 × 3 in)', w: 2, h: 3 },
   { id: 'wallet', label: 'Wallet (2.5 × 3.5 in)', w: 2.5, h: 3.5 },
+  { id: '3x4', label: '3 × 4 in', w: 3, h: 4 },
   { id: '3.5x5', label: '3.5 × 5 in', w: 3.5, h: 5 },
+  { id: '4x5', label: '4 × 5 in', w: 4, h: 5 },
   { id: '4x6', label: '4 × 6 in', w: 4, h: 6 },
   { id: '5x7', label: '5 × 7 in', w: 5, h: 7 },
   { id: '8x10', label: '8 × 10 in', w: 8, h: 10 },
   { id: '10x15cm', label: '10 × 15 cm', w: mm(100), h: mm(150) },
   { id: '13x18cm', label: '13 × 18 cm', w: mm(130), h: mm(180) }
+]
+
+/** One line of a print package: `count` prints of a size, for each photo. */
+export interface PackageItem {
+  size: string
+  /** Custom size in inches, when `size` is 'custom'. */
+  w: number
+  h: number
+  count: number
+}
+
+/** Ready-made packages, like a portrait studio's, each designed for a paper with quarter-inch margins. */
+export const PACKAGE_TEMPLATES: { name: string; paper: string; items: [string, number][] }[] = [
+  { name: '1 × 5×7 + 2 × 3.5×5', paper: 'letter', items: [['5x7', 1], ['3.5x5', 2]] },
+  { name: '1 × 5×7 + 4 wallets', paper: 'letter', items: [['5x7', 1], ['wallet', 4]] },
+  { name: '2 × 3.5×5 + 4 wallets', paper: 'letter', items: [['3.5x5', 2], ['wallet', 4]] },
+  { name: '8 wallets', paper: 'letter', items: [['wallet', 8]] },
+  { name: '1 × 8×10 + 4 wallets', paper: 'superb', items: [['8x10', 1], ['wallet', 4]] },
+  { name: '4 × 4×6', paper: 'superb', items: [['4x6', 4]] },
+  { name: '6 passport photos', paper: '4x6', items: [['passport', 6]] }
 ]
 
 export const PPI_CHOICES = [180, 240, 300, 360, 600, 720]
@@ -63,7 +88,8 @@ export interface PrintSettings {
   units: Units
   layout: LayoutKind
   grid: { rows: number; cols: number; hGap: number; vGap: number }
-  pkg: { size: string; customW: number; customH: number; repeat: number; gap: number }
+  /** Print sizes packed on sheets: what each photo gets, how far apart, and whether photos share sheets. */
+  pkg: { items: PackageItem[]; gap: number; separate: boolean }
   fit: 'fit' | 'fill'
   rotateToFit: boolean
   /** Fill each page with copies of one photo. */
@@ -110,7 +136,7 @@ export const DEFAULT_PRINT: PrintSettings = {
   units: 'in',
   layout: 'single',
   grid: { rows: 2, cols: 2, hGap: 0.2, vGap: 0.2 },
-  pkg: { size: '4x6', customW: 4, customH: 6, repeat: 1, gap: 0.1 },
+  pkg: { items: [{ size: '4x6', w: 4, h: 6, count: 1 }], gap: 0.1, separate: false },
   fit: 'fit',
   rotateToFit: false,
   repeatOnPage: false,
@@ -154,9 +180,17 @@ export const BUILT_IN_PRESETS: PrintPreset[] = [
   { name: 'Single 8×10 on Letter', builtIn: true, settings: { paper: 'letter', layout: 'single', margins: { top: 0.5, right: 0.25, bottom: 0.5, left: 0.25 }, fit: 'fit' } },
   { name: 'Contact sheet 5×6', builtIn: true, settings: { paper: 'letter', orientation: 'portrait', layout: 'grid', grid: { rows: 6, cols: 5, hGap: 0.1, vGap: 0.1 }, fit: 'fit', caption: { ...DEFAULT_PRINT.caption, enabled: true, fields: ['filename'], size: 6 }, pageNumbers: true, ppi: 240 } },
   { name: '4×6 borderless', builtIn: true, settings: { paper: '4x6', layout: 'single', margins: { top: 0, right: 0, bottom: 0, left: 0 }, fit: 'fill' } },
-  { name: 'Two 5×7 on Letter', builtIn: true, settings: { paper: 'letter', layout: 'package', pkg: { size: '5x7', customW: 5, customH: 7, repeat: 1, gap: 0.25 }, margins: { top: 0.25, right: 0.25, bottom: 0.25, left: 0.25 }, fit: 'fill' } },
+  { name: '5×7 prints, two per Letter sheet', builtIn: true, settings: { paper: 'letter', layout: 'package', pkg: { items: [{ size: '5x7', w: 5, h: 7, count: 1 }], gap: 0.25, separate: false }, margins: { top: 0.25, right: 0.25, bottom: 0.25, left: 0.25 }, fit: 'fill' } },
+  { name: 'Portrait package (5×7 + 4 wallets)', builtIn: true, settings: { paper: 'letter', layout: 'package', pkg: { items: [{ size: '5x7', w: 5, h: 7, count: 1 }, { size: 'wallet', w: 2.5, h: 3.5, count: 4 }], gap: 0.1, separate: true }, margins: { top: 0.25, right: 0.25, bottom: 0.25, left: 0.25 }, fit: 'fill', cropMarks: true } },
   { name: 'A4 with white border', builtIn: true, settings: { paper: 'a4', layout: 'single', margins: { top: 0.6, right: 0.6, bottom: 0.6, left: 0.6 }, border: 0.4, stroke: { width: 0.5, color: '#000000' }, fit: 'fit' } }
 ]
+
+/** Package settings, converting the single-size form saved by Glimmr 1.0.7. */
+function migratePkg(pkg: unknown): PrintSettings['pkg'] {
+  const o = (pkg ?? {}) as Partial<PrintSettings['pkg']> & { size?: string; customW?: number; customH?: number; repeat?: number }
+  const items = Array.isArray(o.items) && o.items.length ? o.items : o.size ? [{ size: o.size, w: o.customW ?? 4, h: o.customH ?? 6, count: o.repeat ?? 1 }] : DEFAULT_PRINT.pkg.items
+  return { items: items.map((i) => ({ size: i.size, w: i.w ?? 4, h: i.h ?? 6, count: Math.max(1, Math.round(i.count ?? 1)) })), gap: o.gap ?? DEFAULT_PRINT.pkg.gap, separate: !!o.separate }
+}
 
 /** Merges saved settings over the defaults, so settings saved by older versions gain new fields. */
 export function withDefaults(s: Partial<PrintSettings> | null | undefined): PrintSettings {
@@ -166,7 +200,7 @@ export function withDefaults(s: Partial<PrintSettings> | null | undefined): Prin
     ...p,
     margins: { ...DEFAULT_PRINT.margins, ...p.margins },
     grid: { ...DEFAULT_PRINT.grid, ...p.grid },
-    pkg: { ...DEFAULT_PRINT.pkg, ...p.pkg },
+    pkg: migratePkg(p.pkg),
     stroke: { ...DEFAULT_PRINT.stroke, ...p.stroke },
     caption: { ...DEFAULT_PRINT.caption, ...p.caption },
     watermark: { ...DEFAULT_PRINT.watermark, ...p.watermark },
@@ -248,15 +282,111 @@ export function paperSize(s: PrintSettings): { w: number; h: number } {
   return { w: p.w, h: p.h }
 }
 
-export function printSize(s: PrintSettings): { w: number; h: number } {
-  if (s.pkg.size === 'custom') return { w: Math.max(0.5, s.pkg.customW), h: Math.max(0.5, s.pkg.customH) }
-  const p = PRINT_SIZES.find((x) => x.id === s.pkg.size) ?? PRINT_SIZES[2]
+/** A package line's print size in inches (portrait). */
+export function itemSize(i: PackageItem): { w: number; h: number } {
+  if (i.size === 'custom') return { w: Math.max(0.5, Math.min(i.w, i.h)), h: Math.max(0.5, Math.max(i.w, i.h)) }
+  const p = PRINT_SIZES.find((x) => x.id === i.size) ?? PRINT_SIZES.find((x) => x.id === '4x6')!
   return { w: p.w, h: p.h }
+}
+
+export const itemLabel = (i: PackageItem): string => (i.size === 'custom' ? `${Number(i.w.toFixed(2))} × ${Number(i.h.toFixed(2))} in` : (PRINT_SIZES.find((x) => x.id === i.size)?.label ?? i.size))
+
+export interface Tile {
+  /** Index into the list of tiles, so callers can carry data along. */
+  key: number
+  w: number
+  h: number
+  /** Prefer the tile landscape (the photo is). */
+  landscape: boolean
+}
+
+type Packed = { sheets: { key: number; rect: Rect }[][]; tooBig: number[] }
+
+/** One guillotine packing pass with a given orientation preference, split rule and order. */
+function packOnce(tiles: Tile[], area: Rect, gap: number, prefer: 'photo' | 'turned' | 'portrait' | 'landscape', split: 'short' | 'long', order: 'area' | 'side'): Packed {
+  const sorted = [...tiles].sort((a, b) =>
+    order === 'area' ? b.w * b.h - a.w * a.h || Math.max(b.w, b.h) - Math.max(a.w, a.h) || a.key - b.key : Math.max(b.w, b.h) - Math.max(a.w, a.h) || b.w * b.h - a.w * a.h || a.key - b.key
+  )
+  const tooBig: number[] = []
+  const sheets: { key: number; rect: Rect }[][] = []
+  // Free space per sheet, each rectangle inflated by the gap so neighbours stay `gap` apart.
+  const free: Rect[][] = []
+  const fits = (t: { w: number; h: number }, f: Rect): boolean => t.w + gap <= f.w + 1e-9 && t.h + gap <= f.h + 1e-9
+  for (const t of sorted) {
+    const want = prefer === 'photo' ? t.landscape : prefer === 'turned' ? !t.landscape : prefer === 'landscape'
+    const shapes = [
+      { w: t.w, h: t.h },
+      { w: t.h, h: t.w }
+    ].sort((a, b) => Number(b.w >= b.h === want) - Number(a.w >= a.h === want))
+    if (!shapes.some((sh) => sh.w <= area.w + 1e-9 && sh.h <= area.h + 1e-9)) {
+      tooBig.push(t.key)
+      continue
+    }
+    for (let si = 0; ; si++) {
+      if (si === sheets.length) {
+        sheets.push([])
+        free.push([{ x: 0, y: 0, w: area.w + gap, h: area.h + gap }])
+      }
+      // Best area fit; the preferred orientation wins ties.
+      let best: { fi: number; sh: { w: number; h: number }; waste: number } | null = null
+      free[si].forEach((f, fi) => {
+        for (const sh of shapes) {
+          if (!fits(sh, f)) continue
+          const waste = f.w * f.h - (sh.w + gap) * (sh.h + gap)
+          if (!best || waste < best.waste - 1e-9) best = { fi, sh, waste }
+        }
+      })
+      if (!best) continue
+      const { fi, sh } = best as { fi: number; sh: { w: number; h: number } }
+      const f = free[si][fi]
+      const w = sh.w + gap
+      const h = sh.h + gap
+      sheets[si].push({ key: t.key, rect: { x: f.x, y: f.y, w: sh.w, h: sh.h } })
+      // Split what's left with one straight cut, so the sheet stays cuttable edge to edge.
+      const right = f.w - w
+      const below = f.h - h
+      const horizontal = split === 'short' ? right < below : right >= below
+      const parts: Rect[] = horizontal ? [{ x: f.x + w, y: f.y, w: right, h }, { x: f.x, y: f.y + h, w: f.w, h: below }] : [{ x: f.x + w, y: f.y, w: right, h: f.h }, { x: f.x, y: f.y + h, w, h: below }]
+      free[si].splice(fi, 1, ...parts.filter((r) => r.w > 1e-6 && r.h > 1e-6))
+      break
+    }
+  }
+  return { sheets, tooBig }
+}
+
+/**
+ * Packs print tiles onto as few sheets as possible with guillotine packing: every sheet can be cut apart with
+ * straight cuts edge to edge, as on a paper trimmer. Tiles may turn a quarter. Several strategies are tried and the
+ * one with the fewest sheets wins (then the most prints in their photo's orientation). Each sheet is centred.
+ */
+export function packTiles(tiles: Tile[], area: Rect, gap: number): Packed {
+  let best: Packed | null = null
+  let bestScore = [Infinity, -Infinity]
+  for (const prefer of ['photo', 'turned', 'portrait', 'landscape'] as const)
+    for (const split of ['short', 'long'] as const)
+      for (const order of ['area', 'side'] as const) {
+        const r = packOnce(tiles, area, gap, prefer, split, order)
+        const matching = r.sheets.flat().filter((p) => (p.rect.w >= p.rect.h) === tiles.find((t) => t.key === p.key)!.landscape).length
+        const score = [r.sheets.length, matching]
+        if (score[0] < bestScore[0] || (score[0] === bestScore[0] && score[1] > bestScore[1])) {
+          best = r
+          bestScore = score
+        }
+      }
+  const result = best ?? { sheets: [], tooBig: [] }
+  for (const sheet of result.sheets) {
+    const right = Math.max(...sheet.map((p) => p.rect.x + p.rect.w))
+    const bottom = Math.max(...sheet.map((p) => p.rect.y + p.rect.h))
+    const dx = area.x + (area.w - right) / 2
+    const dy = area.y + (area.h - bottom) / 2
+    for (const p of sheet) p.rect = { ...p.rect, x: p.rect.x + dx, y: p.rect.y + dy }
+  }
+  return result
 }
 
 const textBand = (pt: number): number => (pt / 72) * 2
 
-/** Cells for one page of the chosen layout, in page inches, before photos are assigned. */
+/** Cells for one page of a single or grid layout, in page inches, before photos are assigned. */
 function cellRects(s: PrintSettings, area: Rect): { rects: Rect[]; problem: string | null } {
   if (s.layout === 'single') return { rects: [area], problem: null }
   if (s.layout === 'grid') {
@@ -269,21 +399,7 @@ function cellRects(s: PrintSettings, area: Rect): { rects: Rect[]; problem: stri
     for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) rects.push({ x: area.x + c * (w + s.grid.hGap), y: area.y + r * (h + s.grid.vGap), w, h })
     return { rects, problem: null }
   }
-  // Picture package: as many prints of a fixed size as fit, in whichever orientation fits more, centred.
-  const size = printSize(s)
-  const g = s.pkg.gap
-  const fit = (w: number, h: number): { cols: number; rows: number } => ({ cols: Math.floor((area.w + g + 1e-9) / (w + g)), rows: Math.floor((area.h + g + 1e-9) / (h + g)) })
-  const a = fit(size.w, size.h)
-  const b = fit(size.h, size.w)
-  const [w, h, n] = a.cols * a.rows >= b.cols * b.rows ? [size.w, size.h, a] : [size.h, size.w, b]
-  if (!n.cols || !n.rows) return { rects: [], problem: 'That print size doesn’t fit on this paper with these margins.' }
-  const totalW = n.cols * w + (n.cols - 1) * g
-  const totalH = n.rows * h + (n.rows - 1) * g
-  const x0 = area.x + (area.w - totalW) / 2
-  const y0 = area.y + (area.h - totalH) / 2
-  const rects: Rect[] = []
-  for (let r = 0; r < n.rows; r++) for (let c = 0; c < n.cols; c++) rects.push({ x: x0 + c * (w + g), y: y0 + r * (h + g), w, h })
-  return { rects, problem: null }
+  return { rects: [], problem: null }
 }
 
 /** Places a photo in a cell: fit (whole photo) or fill (cropped), with border, caption band and rotate-to-fit. */
@@ -337,6 +453,30 @@ function pageGeometry(s: PrintSettings, landscape: boolean): { width: number; he
   return { width, height, area: { x: m.left, y: top, w: Math.max(0.1, width - m.left - m.right), h: Math.max(0.1, height - top - bottom) }, header, footer }
 }
 
+/** Package sheets: each photo's prints (per the package), packed onto sheets, all photos together or each apart. */
+function packagePages(s: PrintSettings, photos: PrintPhoto[], area: Rect, placements: Record<number, Placement>): { pages: Page[]; problem: string | null } {
+  const tiles: (Tile & { photo: PrintPhoto })[] = []
+  for (const photo of photos)
+    for (const item of s.pkg.items) {
+      const size = itemSize(item)
+      for (let n = 0; n < Math.max(1, Math.round(item.count)); n++) tiles.push({ key: tiles.length, w: size.w, h: size.h, landscape: photo.w > photo.h, photo })
+    }
+  const groups = s.pkg.separate ? photos.map((p) => tiles.filter((t) => t.photo === p)) : [tiles]
+  const pages: Page[] = []
+  let problem: string | null = null
+  // A print is cut out and turned, so photos always turn to match their print.
+  const sp = { ...s, rotateToFit: true }
+  for (const group of groups) {
+    const { sheets, tooBig } = packTiles(group, area, s.pkg.gap)
+    if (tooBig.length) {
+      const t = tiles[tooBig[0]]
+      problem = `A ${Number(t.w.toFixed(2))} × ${Number(t.h.toFixed(2))} in print doesn’t fit on this paper with these margins.`
+    }
+    for (const sheet of sheets) pages.push({ index: pages.length, cells: sheet.map(({ key, rect }) => placePhoto(sp, tiles[key].photo, rect, placements[tiles[key].photo.id])) })
+  }
+  return { pages, problem }
+}
+
 /** Lays photos out on pages. */
 export function computeLayout(s: PrintSettings, photos: PrintPhoto[], placements: Record<number, Placement> = {}): Layout {
   let landscape = s.orientation === 'landscape'
@@ -346,22 +486,24 @@ export function computeLayout(s: PrintSettings, photos: PrintPhoto[], placements
       landscape = !!p && p.w > p.h
     } else if (s.layout === 'grid') landscape = s.grid.cols > s.grid.rows
     else {
-      // Whichever orientation fits more prints.
-      const count = (l: boolean): number => cellRects(s, pageGeometry(s, l).area).rects.length
-      landscape = count(true) > count(false)
+      // Whichever orientation needs fewer sheets.
+      const sheets = (l: boolean): number => packagePages(s, photos.length ? photos : [{ id: 0, w: 3, h: 2 }], pageGeometry(s, l).area, {}).pages.length || Infinity
+      landscape = sheets(true) < sheets(false)
     }
   }
   const g = pageGeometry(s, landscape)
+  if (s.layout === 'package') {
+    const { pages, problem } = packagePages(s, photos, g.area, placements)
+    return { ...g, landscape, pages, problem }
+  }
   const { rects, problem } = cellRects(s, g.area)
   const pages: Page[] = []
   if (rects.length && photos.length) {
-    // The sequence of photos to place: each repeated for packages, or one photo per page when repeating on the page.
-    const seq: PrintPhoto[] = s.layout === 'package' ? photos.flatMap((p) => Array.from({ length: Math.max(1, Math.round(s.pkg.repeat)) }, () => p)) : photos
     if (s.repeatOnPage && s.layout !== 'single') {
-      seq.forEach((p, i) => pages.push({ index: i, cells: rects.map((r) => placePhoto(s, p, r, placements[p.id])) }))
+      photos.forEach((p, i) => pages.push({ index: i, cells: rects.map((r) => placePhoto(s, p, r, placements[p.id])) }))
     } else {
-      for (let i = 0; i < seq.length; i += rects.length) {
-        const chunk = seq.slice(i, i + rects.length)
+      for (let i = 0; i < photos.length; i += rects.length) {
+        const chunk = photos.slice(i, i + rects.length)
         pages.push({ index: pages.length, cells: chunk.map((p, k) => placePhoto(s, p, rects[k], placements[p.id])) })
       }
     }

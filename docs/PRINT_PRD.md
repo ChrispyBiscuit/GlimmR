@@ -55,7 +55,7 @@ Print any photos from Glimmr as well as Lightroom Classic or Capture One would, 
 |---|---|---|
 | PR-L1 | **Single photo:** one photo per page. | P0 |
 | PR-L2 | **Grid / contact sheet:** rows × columns, horizontal and vertical spacing. | P0 |
-| PR-L3 | **Print size / picture package:** pick a print size (wallet, 3.5×5, 4×6, 5×7, 8×10, custom). As many as fit are packed per page, in order or repeating each photo N times. | P0 |
+| PR-L3 | **Print sizes / picture packages:** any mix of sizes per photo (passport, wallets, 3×4, 3.5×5, 4×5, 4×6, 5×7, 8×10, metric, custom), e.g. one 5×7 + four wallets. Packed onto as few sheets as possible with guillotine packing, so sheets can be cut apart with straight cuts. Photos share sheets or get their own. Ready-made templates. | P0 |
 | PR-L4 | **Fit or fill:** fit shows the whole photo; fill crops to fill the cell. | P0 |
 | PR-L5 | **Reposition the crop** of a filled photo by dragging it in the preview, and zoom it in. This is stored with the print job only. | P0 |
 | PR-L6 | **Rotate to fit:** turn photos to best fill their cell. | P0 |

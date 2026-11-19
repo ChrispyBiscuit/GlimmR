@@ -41,10 +41,65 @@ describe('print layout', () => {
   })
 
   it('packs print sizes, choosing the orientation that fits more', () => {
-    const l = computeLayout(S({ layout: 'package', pkg: { size: '4x6', customW: 4, customH: 6, repeat: 3, gap: 0.1 } }), [landscape])
-    expect(l.pages[0].cells.length + (l.pages[1]?.cells.length ?? 0)).toBe(3)
+    const l = computeLayout(S({ layout: 'package', pkg: { items: [{ size: '4x6', w: 4, h: 6, count: 3 }], gap: 0.1, separate: false } }), [landscape])
+    expect(l.pages.flatMap((p) => p.cells).length).toBe(3)
     for (const c of l.pages[0].cells) expect([4, 6]).toContain(Math.round(c.cell.w))
-    expect(computeLayout(S({ layout: 'package', pkg: { size: 'custom', customW: 20, customH: 30, repeat: 1, gap: 0 } }), [landscape]).problem).toMatch(/doesn’t fit/)
+    expect(computeLayout(S({ layout: 'package', pkg: { items: [{ size: 'custom', w: 20, h: 30, count: 1 }], gap: 0, separate: false } }), [landscape]).problem).toMatch(/doesn’t fit/)
+    // Settings saved by 1.0.7 had one size and a repeat count.
+    expect(withDefaults({ pkg: { size: '5x7', customW: 5, customH: 7, repeat: 2, gap: 0.2 } } as never).pkg).toEqual({ items: [{ size: '5x7', w: 5, h: 7, count: 2 }], gap: 0.2, separate: false })
+  })
+
+  it('packs mixed sizes onto one sheet so it can be cut apart with straight cuts', () => {
+    const s = S({ layout: 'package', paper: 'letter', margins: { top: 0.25, right: 0.25, bottom: 0.25, left: 0.25 }, pkg: { items: [{ size: '5x7', w: 5, h: 7, count: 1 }, { size: 'wallet', w: 2.5, h: 3.5, count: 4 }], gap: 0.1, separate: false } })
+    const l = computeLayout(s, [portrait])
+    expect(l.pages).toHaveLength(1)
+    const cells = l.pages[0].cells.map((c) => c.cell)
+    expect(cells.map((c) => Math.round(c.w * c.h * 100) / 100).sort((x, y) => x - y)).toEqual([8.75, 8.75, 8.75, 8.75, 35])
+    // Inside the margins, and never closer than the gap.
+    for (const c of cells) {
+      expect(c.x).toBeGreaterThanOrEqual(0.25 - 1e-9)
+      expect(c.y).toBeGreaterThanOrEqual(0.25 - 1e-9)
+      expect(c.x + c.w).toBeLessThanOrEqual(l.width - 0.25 + 1e-9)
+      expect(c.y + c.h).toBeLessThanOrEqual(l.height - 0.25 + 1e-9)
+    }
+    for (const [i, a] of cells.entries())
+      for (const b of cells.slice(i + 1)) {
+        const apart = a.x + a.w + 0.1 <= b.x + 1e-9 || b.x + b.w + 0.1 <= a.x + 1e-9 || a.y + a.h + 0.1 <= b.y + 1e-9 || b.y + b.h + 0.1 <= a.y + 1e-9
+        expect(apart).toBe(true)
+      }
+    // Guillotine: some full-length straight cut always separates the pieces, recursively.
+    const cuttable = (rs: typeof cells): boolean => {
+      if (rs.length <= 1) return true
+      for (const axis of ['x', 'y'] as const) {
+        const size = axis === 'x' ? 'w' : 'h'
+        for (const r of rs) {
+          const at = r[axis] + r[size] + 0.05
+          const before = rs.filter((q) => q[axis] + q[size] <= at)
+          const after = rs.filter((q) => q[axis] >= at)
+          if (before.length && after.length && before.length + after.length === rs.length) return cuttable(before) && cuttable(after)
+        }
+      }
+      return false
+    }
+    expect(cuttable(cells)).toBe(true)
+    // Prints follow their photo's orientation.
+    expect(computeLayout(S({ layout: 'package', pkg: { items: [{ size: '4x6', w: 4, h: 6, count: 1 }], gap: 0.1, separate: false } }), [landscape]).pages[0].cells[0].cell.w).toBe(6)
+  })
+
+  it('fits a lab-style package on one sheet per photo', () => {
+    // 5×7 + 4 wallets on Letter with quarter-inch margins: the 5×7 turned landscape, wallets in a 2×2 block below.
+    const s = S({ layout: 'package', paper: 'letter', orientation: 'portrait', margins: { top: 0.25, right: 0.25, bottom: 0.25, left: 0.25 }, pkg: { items: [{ size: '5x7', w: 5, h: 7, count: 1 }, { size: 'wallet', w: 2.5, h: 3.5, count: 4 }], gap: 0.1, separate: false } })
+    expect(computeLayout(s, [portrait]).pages).toHaveLength(1)
+    expect(computeLayout(s, [portrait, landscape]).pages).toHaveLength(2)
+    expect(computeLayout(S({ layout: 'package', paper: 'letter', margins: { top: 0.25, right: 0.25, bottom: 0.25, left: 0.25 }, pkg: { items: [{ size: 'wallet', w: 2.5, h: 3.5, count: 8 }], gap: 0.1, separate: false } }), [portrait]).pages).toHaveLength(1)
+  })
+
+  it('puts photos on shared sheets, or each on its own', () => {
+    const pkg = { items: [{ size: 'wallet', w: 2.5, h: 3.5, count: 2 }], gap: 0.1, separate: false }
+    const two = [landscape, portrait]
+    expect(computeLayout(S({ layout: 'package', pkg }), two).pages).toHaveLength(1)
+    const apart = computeLayout(S({ layout: 'package', pkg: { ...pkg, separate: true } }), two)
+    expect(apart.pages.map((p) => [...new Set(p.cells.map((c) => c.photoId))])).toEqual([[1], [2]])
   })
 
   it('fills by cropping to the cell, and the crop can be moved and zoomed', () => {

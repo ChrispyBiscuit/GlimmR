@@ -23,7 +23,8 @@ edit photos.
   equivalent and crop factor, field of view, metering, flash, white balance, colour space and profile, bit depth,
   serial numbers and more, with EXIF codes shown as words.
 - **Print like a pro.** `Ctrl/⌘ P` opens a print workspace with a live page preview:
-  - **Layouts:** single photos, grids and contact sheets, or print sizes packed on a page.
+  - **Layouts:** single photos, grids and contact sheets, or picture packages that mix sizes (5×7, wallets,
+    passport photos…) on one sheet, laid out so it can be cut apart with straight cuts.
   - **Cropping and borders:** fit or fill, with drag-to-crop; borders, strokes and crop marks.
   - **Text:** captions, header and footer, watermark.
   - **Quality:** 180–720 ppi, print sharpening for glossy or matte, and print brightness and contrast.
