@@ -11,6 +11,7 @@ import { setWasmSource } from './print/color'
 import { addProfile, listProfiles } from './print/profiles'
 import { previewPage, runOutput } from './print/job'
 import { fontCss, listPrinters, pdfHtml, printHtml } from './print/printer'
+import { driverInfo, openWindowsPreferences } from './print/driver'
 import { Library } from './library'
 import { scanRoot } from './scanner'
 import { SORT_FIELDS } from './query'
@@ -536,6 +537,10 @@ export function createApi(ctx: AppContext): Api {
       if (process.platform === 'darwin') void shell.openExternal('x-apple.systempreferences:com.apple.Print-Scan-Settings.extension')
       else if (process.platform === 'win32') void shell.openExternal('ms-settings:printers')
       else void shell.openExternal('http://localhost:631/printers/')
+    },
+    printerOptions: (printer) => driverInfo(printer),
+    printerPreferences: (printer) => {
+      if (process.platform === 'win32') openWindowsPreferences(printer)
     },
     showFile: (p) => shell.showItemInFolder(p),
     displayColor: () => {

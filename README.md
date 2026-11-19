@@ -31,6 +31,9 @@ edit photos.
   - **Colour management** with Little CMS: your paper's ICC profile with any rendering intent and black point
     compensation, soft proofing, and a gamut warning.
   - **Output:** any printer, a PDF, or JPEG/TIFF files tagged with the profile for a lab.
+  - **Printer settings** from the printer's own driver, for any brand (Epson, Canon, HP, Brother…): paper
+    source (tray), media type and print quality, remembered per printer. On Windows, Printer preferences… opens
+    the manufacturer's settings window.
   - **Presets**, a profile manager, and a printable calibration chart.
 - **Open in your editor.** `Ctrl/⌘ E` opens the selection in your default editor, with per-type defaults
   (e.g. RAW → Capture One, JPEG → Photoshop). Editors are detected automatically, and you can add any app.
@@ -172,9 +175,15 @@ Electron main (Node)                                    Renderer (React + shadcn
     sharpening.
   - **Colour:** Little CMS 2.16 as WebAssembly (vendored from lcms-wasm, MIT) handles profile conversion,
     rendering intents, black point compensation, soft proof and gamut warning. sharp only offers perceptual.
-  - **Output:** printer and PDF use a hidden window printing an exact-size HTML page, so text stays vector. Files
+  - **Output:** the pages are an exact-size HTML page rendered in a hidden window, so text stays vector. Files
     are composited at print resolution with the profile embedded but not converted twice.
-  - **Tests:** an end-to-end test prints through a real CUPS printer.
+  - **Printer settings** (`src/main/print/driver.ts`): Chromium's print path can't set the tray, media type or
+    quality, so the driver used its default tray. On macOS and Linux every printer is a CUPS queue whose options
+    `lpoptions -l` lists (labels come from the PPD when readable), so silent prints go to CUPS as a PDF with `lp`,
+    the chosen options, and the paper's standard name (its borderless variant for zero margins). On Windows,
+    `printui.dll,PrintUIEntry /e` opens the driver's Printing Preferences, which silent prints start from, and
+    standard papers are passed by name so the driver matches its own size.
+  - **Tests:** an end-to-end test prints through a real CUPS printer, including one with three trays.
 - **Editors**: Lightroom Classic and Capture One are catalog-based, so opening a file outside their catalog
   shows their import window. Ratings and keywords only reach them through XMP sidecars (Settings → Library →
   *Write XMP*, or *Write XMP* on a selection).

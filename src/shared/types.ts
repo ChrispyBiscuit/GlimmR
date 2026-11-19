@@ -222,6 +222,31 @@ export interface PrinterInfo {
   model: string
 }
 
+/** One setting a printer's own driver offers (CUPS), such as its paper source, media type or print quality. */
+export interface DriverOption {
+  /** The driver's keyword, e.g. InputSlot. */
+  key: string
+  label: string
+  /** Where the print window shows it. */
+  group: 'source' | 'media' | 'quality' | 'other'
+  choices: { value: string; label: string }[]
+  /** The printer's own default choice. */
+  defaultValue: string
+}
+
+/**
+ * What Glimmr can set on a printer. On macOS and Linux every driver (Epson, Canon, HP, Brother and the rest) lists its
+ * options through CUPS, so they're shown in the print window. On Windows the driver's own Printing Preferences window
+ * holds them, and silent prints use whatever is chosen there.
+ */
+export interface DriverInfo {
+  kind: 'cups' | 'windows' | 'none'
+  printer: string | null
+  options: DriverOption[]
+  /** The driver's page size keywords. */
+  pageSizes: string[]
+}
+
 /** Per-channel counts in 256 bins, from the image as shown (edits applied). */
 export interface Histogram {
   r: number[]

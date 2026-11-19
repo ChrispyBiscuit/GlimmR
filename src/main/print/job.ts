@@ -119,8 +119,8 @@ export interface OutputDeps {
   chartDir: string
   report: (done: number, total: number, message?: string) => void
   signal: AbortSignal
-  /** Prints an HTML file through a hidden window; resolves when the job is handed to the system. */
-  printHtml: (file: string, layout: Layout, s: PrintSettings) => Promise<void>
+  /** Prints an HTML file; resolves when the job is handed to the system, with a note such as the job id. */
+  printHtml: (file: string, layout: Layout, s: PrintSettings, title: string) => Promise<string | void>
   /** Renders an HTML file to PDF bytes. */
   pdfHtml: (file: string, layout: Layout) => Promise<Buffer>
   /** Asks where to save: a file for PDF, a folder for images. Null when cancelled. */
@@ -205,9 +205,9 @@ export async function runOutput(req: PrintRequest, deps: OutputDeps): Promise<Ou
       return { ok: true, message: `Saved ${target}`, files: [target!] }
     }
     deps.report(total, total, 'Sending to the printer…')
-    await deps.printHtml(html, layout, s)
+    const note = await deps.printHtml(html, layout, s, base)
     const n = pages.length * Math.max(1, s.copies)
-    return { ok: true, message: `Sent ${n === 1 ? '1 page' : `${n} pages`} to ${s.printer ?? 'the default printer'}` }
+    return { ok: true, message: `Sent ${n === 1 ? '1 page' : `${n} pages`} to ${s.printer ?? 'the default printer'}${note ? ` (${note})` : ''}` }
   } finally {
     // The print window has already read the files.
     fs.rmSync(tmp, { recursive: true, force: true })

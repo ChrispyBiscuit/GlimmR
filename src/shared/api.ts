@@ -21,6 +21,7 @@ import type {
   Histogram,
   IccProfile,
   PrinterInfo,
+  DriverInfo,
   SmartAlbum,
   SmartTagStatus,
   Suggestion,
@@ -122,6 +123,10 @@ export interface Api {
   /** Prints, or saves a PDF or image files, as the settings say. Runs as a job with progress. */
   print(req: PrintJobRequest): Promise<{ ok: boolean; message: string; files?: string[] }>
   openPrinterSettings(): void
+  /** The printer's own driver settings (tray, media type, quality…). Null means the default printer. */
+  printerOptions(printer: string | null): Promise<DriverInfo>
+  /** Windows: opens the driver's Printing Preferences window (Epson, Canon, HP…). */
+  printerPreferences(printer: string): void
   showFile(path: string): void
   displayColor(): { colorSpace: string; colorDepth: number }
 

@@ -45,7 +45,9 @@ Print any photos from Glimmr as well as Lightroom Classic or Capture One would, 
 | PR-P3 | Orientation: automatic (matches the photo for one photo per page), portrait or landscape. | P0 |
 | PR-P4 | Margins: top, bottom, left, right, with "same on all sides". Borderless (0) for printers that support it. | P0 |
 | PR-P5 | Copies, collate, two-sided (off, long edge, short edge), colour or greyscale, page range. | P0 |
-| PR-P6 | "Printer settings…" opens the system dialog for driver options (paper type, quality). | P0 |
+| PR-P6 | The system print dialog can be used instead, for anything the driver offers. | P0 |
+| PR-P9 | **Driver settings, any brand.** Paper source (tray), media type, print quality and the driver's other options, from the printer's own driver, remembered per printer, with "use the printer's defaults". macOS/Linux: listed in the print window and sent with the job through CUPS. Windows: "Printer preferences…" opens the manufacturer's settings window, which silent prints use. | P0 |
+| PR-P10 | Standard papers are sent by their standard names (and borderless variants for zero margins), so the driver picks its own size and the tray holding it. | P0 |
 | PR-P7 | Units: inches, mm or cm everywhere. | P1 |
 | PR-P8 | Open the operating system's printer settings to add or manage printers. | P1 |
 
@@ -123,7 +125,8 @@ Print any photos from Glimmr as well as Lightroom Classic or Capture One would, 
 ## 12. Non-goals
 
 - Hardware screen calibration (needs a colorimeter and its software).
-- Driver-level control of paper type and quality outside the system dialog. Electron doesn't expose them.
+- Listing Windows driver options inside Glimmr. They are private to each driver (DEVMODE), so the driver's own
+  Printing Preferences window is used instead.
 - Print queue management. Jobs go to the operating system's queue.
 - Building ICC profiles (needs a spectrophotometer).
 
@@ -135,7 +138,13 @@ Print any photos from Glimmr as well as Lightroom Classic or Capture One would, 
 - End to end through a real CUPS printer: a job reaches the queue and produces a page of the right size. PDF
   output has the right page size. File output has the right pixel size and profile.
 
-## 14. Status (1.0.7)
+## 14. Status
+
+Printer driver settings (PR-P9, PR-P10) were added after 1.0.8: a printer could feed from the wrong tray, because Chromium's print path only passes
+paper size, copies, duplex and colour. Verified with a three-tray CUPS printer: the job reached CUPS with the chosen
+paper source, media type and quality, the paper's standard name, and no scaling.
+
+### 1.0.7
 
 Built as specified, except PR-Q5 (16-bit TIFF), which is deferred. Verified:
 

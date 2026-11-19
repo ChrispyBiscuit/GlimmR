@@ -37,6 +37,29 @@ export const PAPERS: Paper[] = [
   { id: 'a2', label: 'A2 (420 × 594 mm)', w: mm(420), h: mm(594) }
 ]
 
+/**
+ * Standard names for the papers, so the driver recognises the size (and picks the tray it's loaded in) rather than
+ * getting an anonymous custom size. `ppd` lists the keywords drivers use, in order of preference; `pwg` is the
+ * PWG 5101.1 name, which CUPS matches to a driver size by its dimensions; `electron` is Chromium's own name.
+ */
+export const PAPER_NAMES: Record<string, { ppd: string[]; pwg: string; electron?: 'Letter' | 'Legal' | 'Tabloid' | 'A2' | 'A3' | 'A4' | 'A5' | 'A6' }> = {
+  letter: { ppd: ['Letter', 'na_letter_8.5x11in'], pwg: 'na_letter_8.5x11in', electron: 'Letter' },
+  legal: { ppd: ['Legal', 'na_legal_8.5x14in'], pwg: 'na_legal_8.5x14in', electron: 'Legal' },
+  tabloid: { ppd: ['Tabloid', '11x17', 'na_ledger_11x17in'], pwg: 'na_ledger_11x17in', electron: 'Tabloid' },
+  superb: { ppd: ['13x19', 'SuperB', 'A3+', 'w936h1368', 'na_super-b_13x19in'], pwg: 'na_super-b_13x19in' },
+  a3plus: { ppd: ['A3+', '13x19', 'SuperB', 'w936h1368', 'na_super-b_13x19in'], pwg: 'na_super-b_13x19in' },
+  '4x6': { ppd: ['4x6', '4x6in', 'w288h432', 'Postcard4x6', 'na_index-4x6_4x6in'], pwg: 'na_index-4x6_4x6in' },
+  '5x7': { ppd: ['5x7', '5x7in', 'w360h504', 'na_5x7_5x7in'], pwg: 'na_5x7_5x7in' },
+  '8x10': { ppd: ['8x10', '8x10in', 'w576h720', 'na_govt-letter_8x10in'], pwg: 'na_govt-letter_8x10in' },
+  '11x14': { ppd: ['11x14', 'w792h1008', 'na_edp_11x14in'], pwg: 'na_edp_11x14in' },
+  '12x18': { ppd: ['12x18', 'w864h1296', 'na_arch-b_12x18in'], pwg: 'na_arch-b_12x18in' },
+  a6: { ppd: ['A6', 'iso_a6_105x148mm'], pwg: 'iso_a6_105x148mm', electron: 'A6' },
+  a5: { ppd: ['A5', 'iso_a5_148x210mm'], pwg: 'iso_a5_148x210mm', electron: 'A5' },
+  a4: { ppd: ['A4', 'iso_a4_210x297mm'], pwg: 'iso_a4_210x297mm', electron: 'A4' },
+  a3: { ppd: ['A3', 'iso_a3_297x420mm'], pwg: 'iso_a3_297x420mm', electron: 'A3' },
+  a2: { ppd: ['A2', 'iso_a2_420x594mm'], pwg: 'iso_a2_420x594mm', electron: 'A2' }
+}
+
 /** Print sizes for picture packages (portrait, inches). */
 export const PRINT_SIZES: Paper[] = [
   { id: 'passport', label: 'Passport (2 × 2 in)', w: 2, h: 2 },
@@ -124,6 +147,8 @@ export interface PrintSettings {
   output: Output
   /** Print through the system dialog, for driver settings such as paper type and quality. */
   systemDialog: boolean
+  /** Driver settings chosen per printer (printer name, or '' for the default printer): keyword → choice. */
+  driver: Record<string, Record<string, string>>
 }
 
 export const DEFAULT_PRINT: PrintSettings = {
@@ -167,7 +192,8 @@ export const DEFAULT_PRINT: PrintSettings = {
   duplex: 'simplex',
   pageRange: '',
   output: 'printer',
-  systemDialog: false
+  systemDialog: false,
+  driver: {}
 }
 
 export interface PrintPreset {
@@ -204,7 +230,8 @@ export function withDefaults(s: Partial<PrintSettings> | null | undefined): Prin
     stroke: { ...DEFAULT_PRINT.stroke, ...p.stroke },
     caption: { ...DEFAULT_PRINT.caption, ...p.caption },
     watermark: { ...DEFAULT_PRINT.watermark, ...p.watermark },
-    adjust: { ...DEFAULT_PRINT.adjust, ...p.adjust }
+    adjust: { ...DEFAULT_PRINT.adjust, ...p.adjust },
+    driver: { ...p.driver }
   }
 }
 
