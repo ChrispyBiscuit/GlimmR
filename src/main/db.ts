@@ -3,7 +3,7 @@ import path from 'node:path'
 import type { Photo } from '../shared/types'
 import { sanitizeEdit } from '../shared/edit'
 
-export const SCHEMA_VERSION = 2
+export const SCHEMA_VERSION = 3
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS roots (
@@ -142,6 +142,11 @@ export function openDb(file: string): Db {
   db.exec(SCHEMA)
   migrate(db)
   const row = db.prepare('PRAGMA user_version').get() as { user_version: number }
+  if (row.user_version < 3) {
+    // Catalog version 3: Glimmr now decodes HEIC itself (before, Windows got the small EXIF thumbnail) and reads raw files' real
+    // preview size: redo previews the startup scan would otherwise keep.
+    db.exec(`UPDATE photos SET has_preview = 0 WHERE ext IN ('heic', 'heif', 'hif') OR (kind = 'raw' AND (width IS NULL OR width * height < 1000000))`)
+  }
   if (row.user_version < SCHEMA_VERSION) db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
   return db
 }

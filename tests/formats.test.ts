@@ -363,6 +363,20 @@ describe('importing every format', () => {
     })
   })
 
+  it('redoes old HEIC and thumbnail-sized raw previews when an older catalog opens', () => {
+    const file = path.join(dir, 'catalog.db')
+    const before = lib.db.prepare(`SELECT filename FROM photos WHERE has_preview = 0`).all()
+    expect(before).toEqual([])
+    lib.db.prepare(`UPDATE photos SET width = 160, height = 120 WHERE filename = 'P100.RW2'`).run()
+    lib.db.exec('PRAGMA user_version = 2')
+    const db = openDb(file)
+    const redo = (db.prepare('SELECT filename FROM photos WHERE has_preview = 0').all() as { filename: string }[]).map((r) => r.filename).sort((a, b) => a.localeCompare(b))
+    // HEICs, and raw files known only by a small size (the test raws carry an 800×533 preview and no EXIF size).
+    expect(redo).toEqual(['camera.HIF', 'IMG_1.CR3', 'L100.raw', 'P100.RW2', 'phone.heic'])
+    expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(3)
+    db.close()
+  })
+
   it('filters by file type', () => {
     expect(all('type:raw')).toEqual(['IMG_1.CR3', 'L100.raw', 'P100.RW2'])
     expect(all('type:cr3')).toEqual(['IMG_1.CR3'])
