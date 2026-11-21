@@ -36,6 +36,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   backup: { destination: null, schedule: 'off', keep: 10, includeOriginals: false, lastBackupAt: null },
   smartTags: { enabled: false },
   print: { last: {}, presets: [] },
+  labs: { develop: false },
   import: { onCard: 'ask', rootId: null, template: '{YYYY}/{YYYY-MM-DD} {event}', copyVideos: true, lastImportId: null }
 }
 
@@ -57,7 +58,8 @@ export class Library {
       backup: { ...DEFAULT_SETTINGS.backup, ...saved.backup },
       smartTags: { ...DEFAULT_SETTINGS.smartTags, ...saved.smartTags },
       print: { ...DEFAULT_SETTINGS.print, ...saved.print },
-      import: { ...DEFAULT_SETTINGS.import, ...saved.import }
+      import: { ...DEFAULT_SETTINGS.import, ...saved.import },
+      labs: { ...DEFAULT_SETTINGS.labs, ...saved.labs }
     }
   }
 

@@ -45,6 +45,8 @@ export interface Photo {
   hasPreview: boolean
   /** Non-destructive rotation and crop, if any. */
   edit: PhotoEdit | null
+  /** Has develop settings (src/shared/develop/settings.ts): shown developed. */
+  developed: boolean
   /** Changes whenever the file or its edit does; used to refresh cached images. */
   rev: number
 }
@@ -221,6 +223,8 @@ export interface AppSettings {
   /** Last-used print settings and saved presets. */
   print: { last: Partial<PrintSettings>; presets: PrintPreset[] }
   import: ImportSettings
+  /** Experimental features, off by default. */
+  labs: { develop: boolean }
 }
 
 export interface DuplicatePhoto extends Photo {
@@ -235,6 +239,42 @@ export interface DuplicateGroup {
   photos: DuplicatePhoto[]
   /** The suggested photo to keep. */
   keeper: number
+}
+
+export interface ExportOptions {
+  format: 'jpeg' | 'png' | 'tiff'
+  /** PNG and TIFF: 8 or 16 bits per channel. */
+  bits: 8 | 16
+  /** JPEG quality, 1–100. */
+  quality: number
+  size: { mode: 'full' | 'long' | 'short' | 'megapixels'; value: number }
+  space: 'srgb' | 'p3'
+  /** Output sharpening for screens. */
+  sharpen: 'off' | 'low' | 'standard' | 'high'
+  metadata: 'all' | 'copyright' | 'none'
+  /** Added to file names, e.g. "-edit". */
+  suffix: string
+  folder: string
+}
+
+export interface LutInfo {
+  sha: string
+  name: string
+  /** Pack (folder) it came from. */
+  folder: string
+  notes: string
+  inLibrary: boolean
+}
+
+export interface StyleInfo {
+  id: number
+  name: string
+  folder: string
+  settings: import('./develop/settings').PartialSettings
+  lut: string | null
+  /** For imported styles: what carried over exactly, approximately, or not at all. */
+  report: { exact: string[]; approximate: string[]; unsupported: string[] } | null
+  builtIn: boolean
 }
 
 export interface ImportSettings {

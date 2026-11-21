@@ -143,6 +143,34 @@ CREATE TABLE IF NOT EXISTS import_files (
   PRIMARY KEY (import_id, source_rel)
 );
 CREATE INDEX IF NOT EXISTS import_files_hash ON import_files(size, quick_hash);
+-- Develop history per photo (undo), styles, and LUTs stored by content (so a photo's look never depends on a file).
+CREATE TABLE IF NOT EXISTS develop_history (
+  photo_id INTEGER NOT NULL REFERENCES photos(id) ON DELETE CASCADE,
+  seq INTEGER NOT NULL,
+  label TEXT NOT NULL,
+  settings TEXT NOT NULL,
+  at INTEGER NOT NULL,
+  PRIMARY KEY (photo_id, seq)
+);
+CREATE TABLE IF NOT EXISTS luts (
+  sha TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  folder TEXT NOT NULL DEFAULT '',
+  data BLOB NOT NULL,
+  notes TEXT NOT NULL DEFAULT '',
+  in_library INTEGER NOT NULL DEFAULT 1,
+  added_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS styles (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  folder TEXT NOT NULL DEFAULT '',
+  settings TEXT NOT NULL,
+  lut TEXT,
+  report TEXT NOT NULL DEFAULT '',
+  builtin INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL
+);
 -- Folders in each library folder, including empty ones (photos' folders are known from the photos table).
 CREATE TABLE IF NOT EXISTS folders (
   root_id INTEGER NOT NULL REFERENCES roots(id) ON DELETE CASCADE,
@@ -197,6 +225,9 @@ function migrate(db: Db): void {
   if (!has.has('quick_hash')) db.exec('ALTER TABLE photos ADD COLUMN quick_hash TEXT')
   if (!has.has('sha256')) db.exec('ALTER TABLE photos ADD COLUMN sha256 TEXT')
   if (!has.has('pixel_hash')) db.exec('ALTER TABLE photos ADD COLUMN pixel_hash TEXT')
+  // Develop settings (src/shared/develop/settings.ts) as JSON, and when they last changed (busts cached images).
+  if (!has.has('develop')) db.exec('ALTER TABLE photos ADD COLUMN develop TEXT')
+  if (!has.has('develop_at')) db.exec('ALTER TABLE photos ADD COLUMN develop_at INTEGER NOT NULL DEFAULT 0')
   // The import that brought the photo in (for the Last import view).
   if (!has.has('import_id')) db.exec('ALTER TABLE photos ADD COLUMN import_id INTEGER')
   db.exec('CREATE INDEX IF NOT EXISTS photos_size_hash ON photos(size, quick_hash)')
@@ -226,7 +257,7 @@ export function tx<T>(db: Db, fn: () => T): T {
 export const PHOTO_COLUMNS = `p.id, p.root_id, p.rel_path, p.filename, p.ext, p.kind, p.size, p.mtime, p.added_at,
   p.taken_at, p.width, p.height, p.orientation, p.make, p.model, p.lens, p.focal, p.aperture, p.shutter, p.iso,
   p.lat, p.lon, p.rating, p.flag, p.label, p.title, p.caption, p.creator, p.offline, p.has_preview, p.edit, p.edited_at,
-  p.companion, r.path AS root_path`
+  p.companion, p.develop IS NOT NULL AS developed, p.develop_at, r.path AS root_path`
 
 export function rowToPhoto(r: Record<string, any>): Photo {
   return {
@@ -263,7 +294,8 @@ export function rowToPhoto(r: Record<string, any>): Photo {
     offline: !!r.offline,
     hasPreview: !!r.has_preview,
     edit: parseEdit(r.edit),
-    rev: r.mtime + (r.edited_at ?? 0)
+    developed: !!r.developed,
+    rev: r.mtime + (r.edited_at ?? 0) + (r.develop_at ?? 0)
   }
 }
 

@@ -32,6 +32,9 @@ import { tagsFor, VOCABULARY_VERSION } from './tagging/rules'
 import { appliedVocabulary, clearTags, embeddedIds, hideTag, pendingTagIds, retagFromEmbeddings, saveTagResults, setAppliedVocabulary, tagCounts } from './tagging/store'
 import { TITLE_BAR } from './titlebar'
 import { RenderService } from './develop/renderService'
+import { renderDevelopedPreviews, renderDevelopedFull, exportPhotos } from './develop/output'
+import * as dev from './develop/catalog'
+import { proxyBytes } from './develop/source'
 
 export class AppContext {
   library: Library
@@ -48,6 +51,21 @@ export class AppContext {
   cards: Volume[] = []
   /** Renders developed photos on the GPU in a hidden window. */
   readonly renderer = new RenderService()
+  private developTimers = new Map<number, NodeJS.Timeout>()
+
+  /** Re-renders a developed photo's previews soon (edits arrive in bursts while sliders move). */
+  queueDeveloped(id: number, delay = 600): void {
+    clearTimeout(this.developTimers.get(id))
+    this.developTimers.set(
+      id,
+      setTimeout(() => {
+        this.developTimers.delete(id)
+        void renderDevelopedPreviews({ db: this.library.db, cacheDir: this.cacheDir, renderer: this.renderer }, id)
+          .then(() => this.emit('library-changed'))
+          .catch(() => undefined)
+      }, delay)
+    )
+  }
   readonly tagger = new Tagger(path.join(app.getPath('userData'), 'Models'), (url, init) => net.fetch(url, init))
   private tagging: Promise<void> | null = null
   private tagAgain = false
@@ -105,7 +123,16 @@ export class AppContext {
       const roots = this.library.listRoots().filter((r) => rootId == null || r.id === rootId)
       for (const root of roots) {
         await this.runJob('scan', `Scanning ${root.name}`, async (report, signal) => {
-          const r = await scanRoot(this.library.db, root.id, root.path, { cacheDir: this.cacheDir, reimport, signal, onProgress: report })
+          const r = await scanRoot(this.library.db, root.id, root.path, {
+            cacheDir: this.cacheDir,
+            reimport,
+            signal,
+            onProgress: report,
+            // A changed file's previews were remade from the original: put its developed look back.
+            afterPreview: (id) => {
+              if (this.library.db.prepare('SELECT 1 FROM photos WHERE id = ? AND develop IS NOT NULL').get(id)) this.queueDeveloped(id)
+            }
+          })
           report(r.found, r.found, `${r.added} new, ${r.updated} updated${r.offline ? `, ${r.offline} missing` : ''}`)
           return r
         })
@@ -303,6 +330,20 @@ export function createApi(ctx: AppContext): Api {
     const { exif_orientation } = lib().db.prepare('SELECT exif_orientation FROM photos WHERE id = ?').get(id) as { exif_orientation: number }
     const shown = displayFile(p)
     await generatePreviews(shown.path, shown.ext, exif_orientation, previewPaths(ctx.cacheDir, id), p.edit)
+    // A developed photo's view comes from its developed image, with the new crop.
+    if (p.developed) await renderDevelopedPreviews(outDeps(), id).catch(() => undefined)
+  }
+  const outDeps = () => ({ db: lib().db, cacheDir: ctx.cacheDir, renderer: ctx.renderer })
+  /** A developed photo's image for print: the preview while laying out, the full-size render for output. */
+  const developedImage = async (id: number, q: 'preview' | 'final'): Promise<string> => {
+    if (q === 'final') return renderDevelopedFull(outDeps(), id)
+    const f = previewPaths(ctx.cacheDir, id).devPreview
+    if (!fs.existsSync(f)) await renderDevelopedPreviews(outDeps(), id)
+    return f
+  }
+  const afterDevelop = (ids: number[]): void => {
+    for (const id of ids) ctx.queueDeveloped(id)
+    lib().db.prepare('DELETE FROM photo_embeddings WHERE photo_id IN (' + ids.map(() => '?').join(',') + ')').run(...ids)
   }
   const changed = (): void => {
     ctx.emit('library-changed')
@@ -568,6 +609,83 @@ export function createApi(ctx: AppContext): Api {
       if (fs.existsSync(abs)) void shell.openPath(abs)
     },
 
+    // ---- develop ----
+    developGet: (id) => {
+      const kind = dev.kindOf(lib().db, id)
+      return { settings: dev.getDevelop(lib().db, id, kind), kind }
+    },
+    developSave: (id, settings, label) => {
+      dev.setDevelop(lib().db, id, settings, label)
+      afterDevelop([id])
+      return lib().photos([id])[0] ?? null
+    },
+    developHistory: (id) => dev.history(lib().db, id),
+    developReset: (ids) => {
+      for (const id of ids) dev.setDevelop(lib().db, id, null, 'Reset')
+      afterDevelop(ids)
+      ctx.emit('library-changed')
+    },
+    developApply: (ids, partial, label) => {
+      const done = dev.applyToMany(lib().db, ids, partial, label)
+      afterDevelop(done)
+      ctx.emit('library-changed')
+      return done.length
+    },
+    styles: () => {
+      dev.ensureBuiltInStyles(lib().db)
+      return dev.listStyles(lib().db)
+    },
+    saveStyle: (name, settings) => dev.saveStyle(lib().db, name, settings),
+    renameStyle: (id, name) => dev.renameStyle(lib().db, id, name),
+    deleteStyle: (id) => dev.deleteStyle(lib().db, id),
+    applyStyle: (ids, styleId, amount) => {
+      const st = dev.listStyles(lib().db).find((x) => x.id === styleId)
+      if (!st) return 0
+      const done = dev.applyToMany(lib().db, ids, st.settings, `Style: ${st.name}`, { amount, style: st.name })
+      afterDevelop(done)
+      ctx.emit('library-changed')
+      return done.length
+    },
+    exportStyle: async (id) => {
+      const f = dev.exportStyle(lib().db, id)
+      const r = await dialog.showSaveDialog(ctx.window!, { title: 'Save style', defaultPath: `${f.name}.glimmrstyle`, filters: [{ name: 'Glimmr style', extensions: ['glimmrstyle'] }] })
+      if (r.canceled || !r.filePath) return false
+      fs.writeFileSync(r.filePath, JSON.stringify(f, null, 1))
+      return true
+    },
+    importLooks: async () => {
+      const r = await dialog.showOpenDialog(ctx.window!, {
+        title: 'Add LUTs and styles',
+        properties: ['openFile', 'openDirectory', 'multiSelections'],
+        filters: [{ name: 'LUTs and styles', extensions: ['cube', '3dl', 'glimmrstyle'] }]
+      })
+      if (r.canceled) return { luts: [], styles: [], failed: [] }
+      const styles = []
+      const failed: { file: string; error: string }[] = []
+      for (const f of r.filePaths.filter((x) => /\.glimmrstyle$/i.test(x)))
+        try {
+          styles.push(dev.importStyleFile(lib().db, fs.readFileSync(f, 'utf8'), path.basename(f)))
+        } catch (e) {
+          failed.push({ file: path.basename(f), error: (e as Error).message })
+        }
+      const luts = dev.importLutFiles(lib().db, r.filePaths.filter((x) => !/\.glimmrstyle$/i.test(x)))
+      return { luts: luts.added, styles, failed: [...failed, ...luts.failed] }
+    },
+    luts: () => dev.listLuts(lib().db),
+    removeLut: (sha) => dev.removeLut(lib().db, sha),
+    lutData: (sha) => dev.lutBytes(lib().db, sha),
+    chooseExportFolder: async () => {
+      const r = await dialog.showOpenDialog(ctx.window!, { title: 'Export to', defaultPath: app.getPath('pictures'), properties: ['openDirectory', 'createDirectory'] })
+      return r.canceled ? null : r.filePaths[0]
+    },
+    exportPhotos: async (ids, opts) => {
+      let out: { files: string[]; failed: { name: string; error: string }[] } = { files: [], failed: [] }
+      await ctx.runJob('files', ids.length === 1 ? 'Exporting a photo' : `Exporting ${ids.length} photos`, async (report, signal) => {
+        out = await exportPhotos(outDeps(), ids, opts, report, signal)
+      })
+      return out
+    },
+
     cards: async () => ctx.cards,
     openImportSource: async (p) => {
       let source = p
@@ -655,10 +773,11 @@ export function createApi(ctx: AppContext): Api {
       // Only profiles Glimmr added can be removed; system ones belong to the OS and printer drivers.
       if (path.dirname(path.resolve(p)) === path.resolve(profileDir())) fs.rmSync(p, { force: true })
     },
-    printPreview: (req, page, pxPerInch) => previewPage(lib().db, ctx.cacheDir, chartDir(), req, page, pxPerInch),
+    printPreview: (req, page, pxPerInch) => previewPage(lib().db, ctx.cacheDir, chartDir(), req, page, pxPerInch, developedImage),
     print: async (req) => {
       const result = await ctx.runJob('print', req.chart ? 'Printing the calibration chart' : 'Printing', async (report, signal) => {
         const r = await runOutput(req, {
+          developed: developedImage,
           db: lib().db,
           cacheDir: ctx.cacheDir,
           chartDir: chartDir(),

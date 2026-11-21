@@ -13,6 +13,8 @@ import { TITLE_BAR } from './titlebar'
 import { watchCards } from './volumes'
 import { sourceFull, sourceImage } from './importer'
 import { developParity } from './develop/parity'
+import { renderDevelopedFull, renderDevelopedPreviews } from './develop/output'
+import { proxyBytes } from './develop/source'
 
 // Developing photos needs WebGL2. Where the GPU is blocklisted, Chromium may only offer WebGL through its software
 // renderer (SwiftShader), which it now hides behind this switch; Glimmr only renders its own local content.
@@ -49,10 +51,33 @@ async function handleImage(request: Request): Promise<Response> {
     }
   }
   const id = Number(url.pathname.slice(1))
+  // The editing copy for the Develop view: header + 16-bit pixels.
+  if (kind === 'develop') {
+    const [p] = getPhotos(ctx.library.db, [id])
+    if (!p || p.offline) return new Response('not found', { status: 404 })
+    try {
+      const o = ctx.library.db.prepare('SELECT exif_orientation FROM photos WHERE id = ?').get(id) as { exif_orientation: number }
+      const bytes = await proxyBytes(ctx.cacheDir, id, p, o.exif_orientation)
+      return new Response(new Uint8Array(bytes), { headers: { 'content-type': 'application/octet-stream', 'cache-control': 'no-store' } })
+    } catch (e) {
+      return new Response((e as Error).message, { status: 500 })
+    }
+  }
   const [photo] = getPhotos(ctx.library.db, [id])
   if (!photo) return new Response('not found', { status: 404 })
   const paths = previewPaths(ctx.cacheDir, id)
-  const edited = isEdited(photo.edit)
+  const edited = isEdited(photo.edit) || photo.developed
+  // A developed photo at 100%: the full-size developed image.
+  if (kind === 'original' && photo.developed && !photo.offline) {
+    try {
+      const full = await renderDevelopedFull({ db: ctx.library.db, cacheDir: ctx.cacheDir, renderer: ctx.renderer }, id)
+      if (!isEdited(photo.edit)) return fetchFile(full)
+      if (!fs.existsSync(paths.full)) await renderFullEdit(full, photo.edit!, paths.full)
+      return fetchFile(paths.full)
+    } catch {
+      /* fall back to the preview below */
+    }
+  }
   // A RAW + JPEG pair is shown by its camera JPEG; `raw` shows the RAW's own preview, for comparison.
   const shown = displayFile(photo)
   if (kind === 'raw') {
@@ -79,6 +104,13 @@ async function handleImage(request: Request): Promise<Response> {
     return fetchFile(paths.full)
   }
   const file = kind === 'thumb' ? paths.thumb : kind === 'preview' && edited ? paths.view : paths.preview
+  if (photo.developed && (kind === 'thumb' || kind === 'preview') && !fs.existsSync(file) && !photo.offline) {
+    try {
+      await renderDevelopedPreviews({ db: ctx.library.db, cacheDir: ctx.cacheDir, renderer: ctx.renderer }, id)
+    } catch {
+      /* the plain previews below */
+    }
+  }
   if (!fs.existsSync(file)) {
     if (photo.offline) return new Response('offline', { status: 404 })
     try {

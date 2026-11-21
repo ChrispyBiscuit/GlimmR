@@ -161,7 +161,8 @@ export const FIELD_HELP: Record<string, string> = {
   height: 'Pixel height',
   size: 'File size, e.g. size:>20mb',
   has: 'gps, keywords, title, caption, rating, label, flag',
-  is: 'offline, online, raw, pick, reject, unrated, edited'
+  style: 'Develop style applied, e.g. style:"Camera-like"',
+  is: 'offline, online, raw, pair, pick, reject, unrated, edited, developed, cropped'
 }
 
 const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
@@ -300,6 +301,8 @@ function buildTerm(t: Term): Built | string {
         default:
           return { sql: 'p.id IN (SELECT photo_id FROM metadata WHERE key = ?)', params: [t.value] }
       }
+    case 'style':
+      return { sql: "(p.develop IS NOT NULL AND EXISTS (SELECT 1 FROM json_each(p.develop, '$.styles') WHERE value LIKE ? ESCAPE '\\'))", params: [like(t.value)] }
     case 'is':
       switch (v) {
         case 'offline':
@@ -316,8 +319,13 @@ function buildTerm(t: Term): Built | string {
         case 'rejected':
           return { sql: "(p.flag = 'reject')", params: [] }
         case 'edited':
+          return { sql: '(p.edit IS NOT NULL OR p.develop IS NOT NULL)', params: [] }
         case 'cropped':
           return { sql: '(p.edit IS NOT NULL)', params: [] }
+        case 'developed':
+          return { sql: '(p.develop IS NOT NULL)', params: [] }
+        case 'pair':
+          return { sql: '(p.companion IS NOT NULL)', params: [] }
         case 'unrated':
           return { sql: '(p.rating = 0)', params: [] }
         default:
@@ -572,7 +580,7 @@ export function suggest(db: Db, input: string): Suggestion[] {
     orientation: ['landscape', 'portrait', 'square'],
     type: ['raw', 'image', ...FORMATS.map((f) => f.id)],
     has: ['gps', 'keywords', 'title', 'caption', 'rating', 'label', 'flag', 'album'],
-    is: ['offline', 'online', 'raw', 'pick', 'reject', 'unrated', 'edited'],
+    is: ['offline', 'online', 'raw', 'pick', 'reject', 'unrated', 'edited', 'developed', 'cropped', 'pair'],
     rating: ['>=1', '>=2', '>=3', '>=4', '5', '0']
   }
   if (fixed[key])

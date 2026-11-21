@@ -18,6 +18,8 @@ export interface PrintSource {
   offline: boolean
   /** A ready image to print instead of the photo (the calibration chart). */
   file?: string
+  /** A developed photo: its developed image, upright (preview size, or full size for output). */
+  developed?: (quality: 'preview' | 'final') => Promise<string>
 }
 
 export interface RawImage {
@@ -29,6 +31,10 @@ export interface RawImage {
 /** The photo upright and edited. Previews start from the cached 2560 px preview; output from the original. */
 async function upright(src: PrintSource, cacheDir: string, quality: 'preview' | 'final'): Promise<Sharp> {
   if (src.file) return sharp(src.file)
+  if (src.developed) {
+    const dev = sharp(await src.developed(quality))
+    return isEdited(src.edit) ? applyEdit(dev, src.edit) : dev
+  }
   const paths = previewPaths(cacheDir, src.id)
   let img: Sharp
   if (quality === 'preview' || src.offline) {

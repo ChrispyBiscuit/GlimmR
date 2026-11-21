@@ -39,7 +39,10 @@ const hex = (c: string): [number, number, number] => {
 }
 
 /** Loads the photos (or the chart) and lays them out. */
-export async function prepare(db: Db, req: PrintRequest, chartDir: string): Promise<Prepared> {
+/** How to get a developed photo's image (see src/main/develop/output.ts). */
+export type DevelopedImage = (id: number, quality: 'preview' | 'final') => Promise<string>
+
+export async function prepare(db: Db, req: PrintRequest, chartDir: string, developed?: DevelopedImage): Promise<Prepared> {
   const s = withDefaults(req.settings)
   const sources = new Map<number, PrintSource>()
   const photos = new Map<number, Photo>()
@@ -55,7 +58,15 @@ export async function prepare(db: Db, req: PrintRequest, chartDir: string): Prom
       const o = (orient.get(p.id) as { exif_orientation: number } | undefined)?.exif_orientation ?? 1
       // A RAW + JPEG pair prints from its full-size camera JPEG.
       const shown = displayFile(p)
-      sources.set(p.id, { id: p.id, path: shown.path, ext: shown.ext, exifOrientation: o, edit: p.edit, offline: p.offline })
+      sources.set(p.id, {
+        id: p.id,
+        path: shown.path,
+        ext: shown.ext,
+        exifOrientation: o,
+        edit: p.edit,
+        offline: p.offline,
+        developed: p.developed && developed && !p.offline ? (q) => developed(p.id, q) : undefined
+      })
       const size = p.width && p.height ? editedSize(p.width, p.height, p.edit) : { w: 3000, h: 2000 }
       list.push({ id: p.id, w: size.w, h: size.h })
     }
@@ -94,8 +105,8 @@ export interface PreviewCell {
 }
 
 /** One page of the print workspace's preview: each cell rendered at screen resolution, soft-proofed if asked. */
-export async function previewPage(db: Db, cacheDir: string, chartDir: string, req: PrintRequest, pageIndex: number, pxPerInch: number): Promise<{ layout: Layout; cells: PreviewCell[] }> {
-  const p = await prepare(db, req, chartDir)
+export async function previewPage(db: Db, cacheDir: string, chartDir: string, req: PrintRequest, pageIndex: number, pxPerInch: number, developed?: DevelopedImage): Promise<{ layout: Layout; cells: PreviewCell[] }> {
+  const p = await prepare(db, req, chartDir, developed)
   const page = p.layout.pages[pageIndex]
   if (!page) return { layout: p.layout, cells: [] }
   const ppi = Math.max(24, Math.min(200, pxPerInch))
@@ -129,6 +140,7 @@ export interface OutputDeps {
   /** Asks where to save: a file for PDF, a folder for images. Null when cancelled. */
   chooseTarget: (kind: 'pdf' | 'folder', suggested: string) => Promise<string | null>
   fontCss?: string
+  developed?: DevelopedImage
 }
 
 export interface OutputResult {
@@ -139,7 +151,7 @@ export interface OutputResult {
 
 /** Produces the job: printer, PDF, or JPEG/TIFF files. */
 export async function runOutput(req: PrintRequest, deps: OutputDeps): Promise<OutputResult> {
-  const p = await prepare(deps.db, req, deps.chartDir)
+  const p = await prepare(deps.db, req, deps.chartDir, deps.developed)
   const { s, layout } = p
   if (layout.problem) return { ok: false, message: layout.problem }
   if (!layout.pages.length) return { ok: false, message: 'There’s nothing to print.' }

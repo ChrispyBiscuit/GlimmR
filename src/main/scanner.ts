@@ -223,6 +223,8 @@ export interface ScanOptions {
   reimport?: boolean
   signal?: AbortSignal
   onProgress?: (done: number, total: number, message?: string) => void
+  /** Called after a photo's previews are made (e.g. to re-render a developed look over them). */
+  afterPreview?: (id: number) => void
 }
 
 export interface ScanResult {
@@ -328,6 +330,7 @@ export async function scanRoot(db: Db, rootId: number, rootPath: string, opts: S
                 `UPDATE photos SET width = ?, height = ?, orientation = ? WHERE id = ? AND (width IS NULL OR width = 0 OR height IS NULL OR (kind = 'raw' AND width * height < ?))`
               ).run(size.width, size.height, orientationOf(size.width, size.height), id!, size.width * size.height)
             db.prepare('UPDATE photos SET has_preview = 1, offline = 0 WHERE id = ?').run(id!)
+            opts.afterPreview?.(id!)
           } catch {
             db.prepare('UPDATE photos SET has_preview = 0 WHERE id = ?').run(id!)
           }

@@ -30,6 +30,10 @@ export interface PreviewPaths {
   full: string
   /** A RAW + JPEG pair's RAW preview, made on demand to compare with the camera JPEG. */
   raw: string
+  /** A developed photo: the 2560 px developed image, upright and uncropped (the edited view is cut from it). */
+  devPreview: string
+  /** A developed photo at full resolution, made on demand (100% zoom, print). */
+  devFull: string
 }
 
 export function previewPaths(cacheDir: string, id: number): PreviewPaths {
@@ -39,7 +43,9 @@ export function previewPaths(cacheDir: string, id: number): PreviewPaths {
     preview: path.join(cacheDir, 'previews', bucket, `${id}.jpg`),
     view: path.join(cacheDir, 'edited', bucket, `${id}.jpg`),
     full: path.join(cacheDir, 'edited', bucket, `${id}-full.jpg`),
-    raw: path.join(cacheDir, 'previews', bucket, `${id}-raw.jpg`)
+    raw: path.join(cacheDir, 'previews', bucket, `${id}-raw.jpg`),
+    devPreview: path.join(cacheDir, 'developed', bucket, `${id}.jpg`),
+    devFull: path.join(cacheDir, 'developed', bucket, `${id}-full.jpg`)
   }
 }
 

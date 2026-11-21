@@ -24,6 +24,9 @@ import type {
   FolderRef,
   ImportMarks,
   DuplicateGroup,
+  ExportOptions,
+  LutInfo,
+  StyleInfo,
   ImportOptions,
   ImportResult,
   ImportSource,
@@ -37,6 +40,7 @@ import type {
   UpdateStatus
 } from './types'
 import type { PhotoEdit } from './edit'
+import type { DevelopSettings, PartialSettings, SourceKind } from './develop/settings'
 import type { Layout, Placement, PrintSettings } from './print'
 
 export interface Api {
@@ -143,6 +147,30 @@ export interface Api {
   closeImportSource(token: string): void
   /** Copies the chosen photos with verification, catalogs them and applies the card marks. */
   runImport(token: string, opts: ImportOptions, marks: ImportMarks): Promise<ImportResult & { error?: string }>
+  // develop (photo editing)
+  /** A photo's develop settings (null when not developed) and the kind of source it develops from. */
+  developGet(id: number): { settings: DevelopSettings | null; kind: SourceKind }
+  /** Saves develop settings with a history step; re-renders the photo's previews in the background. */
+  developSave(id: number, settings: DevelopSettings | null, label: string): Photo | null
+  developHistory(id: number): { seq: number; label: string; at: number; settings: DevelopSettings }[]
+  developReset(ids: number[]): void
+  /** Applies some groups of settings (paste, sync) to photos. */
+  developApply(ids: number[], partial: PartialSettings, label: string): number
+  styles(): StyleInfo[]
+  saveStyle(name: string, settings: PartialSettings): number
+  renameStyle(id: number, name: string): void
+  deleteStyle(id: number): void
+  applyStyle(ids: number[], styleId: number, amount: number): number
+  exportStyle(id: number): Promise<boolean>
+  /** Adds .cube/.3dl LUTs (or folders of them) and .glimmrstyle files, chosen in a dialog. */
+  importLooks(): Promise<{ luts: LutInfo[]; styles: StyleInfo[]; failed: { file: string; error: string }[] }>
+  luts(): LutInfo[]
+  removeLut(sha: string): void
+  /** A LUT's packed bytes, for the live view. */
+  lutData(sha: string): Uint8Array | null
+  chooseExportFolder(): Promise<string | null>
+  exportPhotos(ids: number[], opts: ExportOptions): Promise<{ files: string[]; failed: { name: string; error: string }[] }>
+
   // duplicates
   /** Groups of exact copies and same-picture copies, with a suggested photo to keep in each. */
   duplicates(): Promise<DuplicateGroup[]>
