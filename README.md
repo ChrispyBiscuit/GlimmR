@@ -7,8 +7,8 @@ edit photos.
 
 ![Rediscover](docs/screenshots/02-rediscover.png)
 
-- **Your files stay where they are.** Add folders; Glimmr catalogs them in place and never moves, renames or
-  modifies originals.
+- **Your files stay where they are.** Add folders; Glimmr catalogs them in place and never edits a photo. It only
+  moves, renames or deletes files when you ask, and deletes always go to the system trash.
 - **Every common format.** JPEG, HEIC/HEIF (iPhone, and Canon/Fujifilm/Sony `.hif`), AVIF, JPEG XL, PNG, TIFF, WebP,
   GIF, BMP and Photoshop (PSD/PSB), plus raw files from every major maker: Canon (CR3, CR2, CRW), Nikon (NEF, NRW),
   Sony (ARW, SRF, SR2), Fujifilm (RAF), Olympus/OM System (ORF), Panasonic (RW2, RAW), Leica (RWL), Pentax (PEF),
@@ -20,7 +20,19 @@ edit photos.
   Sort by any field too.
 - **Facets with counts.** Year, rating, flag, color label, camera, lens, keywords, file type, orientation, and
   ISO/focal/aperture ranges. Click to include, ⊖ to exclude. Save any search as a smart album.
-- **Cull with the keyboard.** `0–5` stars, `P` pick, `X` reject, `6–9` color labels, optional auto-advance.
+- **Import from cards.** Plug in a card and Glimmr offers to import it. See what's new (photos already in the library
+  are recognised by content, whatever their name), cull on the card, and copy into dated folders
+  (`{YYYY}/{YYYY-MM-DD} {event}` or your own template). Every copy is checked against the original, an interrupted
+  import picks up where it stopped, and the card is never changed or deleted from.
+- **Cull with the keyboard.** A full-screen cull view (`Ctrl/⌘ Shift C`) with a filmstrip, `P` pick, `X` reject,
+  `U` unflag, `0–5` stars, `6–9` colour labels, auto-advance, and 100% zoom that stays on the same spot from photo to
+  photo. *Delete Rejects* sends rejects to the trash.
+- **RAW + JPEG pairs as one photo.** The RAW is the main file (editing, *Open RAW in…*, XMP); the camera JPEG is what's
+  shown. Rating, moving and deleting treat them as one; either half can be deleted on its own.
+- **Duplicates.** Exact copies and the same picture under another name or with other metadata, with the best copy
+  suggested. Merging keeps one and gives it the others' ratings, keywords and albums.
+- **Folders in the sidebar.** Drag photos or folders onto a folder to move them (`Alt`/`Option` copies), and new
+  folder, rename (`F2`), move, copy and delete. Pairs and sidecars go along, and marks, albums and edits are kept.
 - **Rewarding to browse.** Rediscover home with *On this day*, highlights, *A look back*, shuffle and slideshow.
 - **Rotate, straighten and crop, non-destructively.** Press `R` in the viewer for the crop tool (aspect presets,
   straighten up to ±45° with the crop kept inside the photo), or `[` / `]` to turn photos a quarter anywhere.
@@ -181,6 +193,19 @@ Electron main (Node)                                    Renderer (React + shadcn
 - **Edits**: a rotation, straighten angle and crop per photo (`photos.edit`, see `src/shared/edit.ts`). Thumbnails and
   previews are rendered with the edit applied; the unedited upright preview is kept for the crop tool, and 100% zoom
   renders the edited original on demand. Editors are still sent the original file.
+- **Import, culling, duplicates, pairs and folders** ([research](docs/IMPORT_RESEARCH.md), [PRD](docs/IMPORT_PRD.md)):
+  - **Files of a photo** (`src/main/files.ts`): the main file, the camera JPEG of a pair (same folder, same name,
+    capture times within 2 s) and sidecars (`IMG.xmp`, `IMG.CR3.xmp`, `.AAE`, `.THM`, Capture One `.cos`). Every move,
+    delete, backup and import works on that set.
+  - **File operations** (`src/main/fileops.ts`): verified copies (SHA-256 while reading, `.glimmr-part`, flushed,
+    read back, renamed into place), moves that fall back to a verified copy across drives, no overwriting, trash only.
+  - **Import** (`src/main/importer.ts`, `src/main/volumes.ts`): cards are found by polling mounted volumes for a
+    `DCIM` folder. Already-imported photos match on size and a quick hash, or size, type and capture time; before
+    skipping, a full hash confirms. Each copied file is recorded in `import_files` as it completes.
+  - **Duplicates** (`src/main/duplicates.ts`): quick hash and a 64×64 pixel hash of the upright preview at scan time,
+    SHA-256 only where quick hashes collide.
+  - **Folders** (`src/main/folders.ts`): moves update photo paths in place, so ids, marks and previews survive; a
+    `folders` table keeps empty folders.
 - **Printing** ([research](docs/PRINT_RESEARCH.md), [PRD](docs/PRINT_PRD.md)):
   - **Layout:** pure geometry in inches (`src/shared/print.ts`) drives the live preview and every output.
   - **Rendering:** photos are rendered in the main process (`src/main/print`) from the full-resolution original,

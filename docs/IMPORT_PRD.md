@@ -227,14 +227,37 @@ New and changed tables (catalog version 4):
 | **2** | Same-shot and similar duplicates with merge, versions and stacks, compare and survey, bursts, second copy, rename templates, eject, undo, missing-folder relink |
 | **3** | Sharpness hints, import presets and metadata on import, several cards at once |
 
-## 12. Decisions
+## 12. Status
+
+Phase 1 is built:
+
+- **Import:** IM-1, IM-2, IM-4–9, IM-12, IM-15–21, IM-23.
+- **Cull view:** CU-1–3, CU-7–9.
+- **Duplicates:** exact and same-picture tiers. DU-1–6 and DU-8, except the toast on adding a folder; the sidebar
+  shows a count instead.
+- **Pairs:** ST-1–3, ST-6, ST-10. ST-10 is trivially met, since versions come in phase 2.
+- **Folders:** FO-1–7, FO-10 (drops from the photo grid only), FO-11.
+
+Verified with unit tests and end-to-end runs of the built app:
+
+- a fake card detected under `/media`, culled, imported, card unchanged
+- folder drag and drop, rename, delete
+- the Duplicates view and merge
+- the library cull with Delete Rejects
+
+On a card, 100% zoom shows full resolution for camera JPEGs and a 2048 px preview for RAW and HEIC files.
+
+Still to do in later phases: same-shot and similar duplicates, versions and stacks, compare and survey, bursts, second
+copy, rename templates, eject, undo, missing-folder relink, Unpair/Pair (ST-4).
+
+## 13. Decisions
 
 1. **Pairs:** the RAW is the main file; the camera JPEG is what's displayed. The two are linked in the catalog like
    a database relation, so the RAW can always be found and re-edited from the JPEG.
 2. **Cards:** Glimmr never deletes from a card. The user manages deletions.
 3. **Culling on the card:** rejects aren't imported and stay on the card.
 
-## 13. Open questions
+## 14. Open questions
 
 1. Similar-photo threshold: CLIP ViT-B/16 values above are starting points. They will be tuned on a labelled test
    set of bursts, brackets and re-exports before release.
