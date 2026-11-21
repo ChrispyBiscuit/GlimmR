@@ -176,7 +176,7 @@ Photo Mechanic is "import this folder into Lightroom" (*forum*).
    - The destination is a folder Glimmr already catalogs, named by a date template.
    - Optional second copy and rename.
    - Every copy is verified with a checksum before anything on the card can be deleted. No photo app does this, and
-     it's what makes deleting from the card safe.
+     it's what makes the copy trustworthy. Glimmr leaves the card alone: the user manages deletions.
 2. **Skip what's already imported by content, not name.** Use the file hash, falling back to capture time + camera
    + size. Remember imported cards like Photo Mechanic's incremental ingest.
 3. **Cull either on the card or after import**, in a dedicated full-screen cull view:

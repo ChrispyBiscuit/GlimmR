@@ -19,7 +19,7 @@ library stays clean:
 ## 2. Principles
 
 1. **Nothing is lost.**
-   - Copies are verified with a checksum before anything on a card can be deleted.
+   - Copies are verified with a checksum, and cards are never written to: the user manages the card.
    - Deletes go to the system trash. If a volume has no trash, Glimmr says so and asks before deleting permanently.
    - Glimmr never formats cards.
 2. **Content, not names.** File names repeat across cards, folders and cameras, so identity comes from content
@@ -78,8 +78,7 @@ library stays clean:
 |---|---|---|
 | IM-21 | Summary: imported, skipped as already imported, failed (with reasons), and where the files went. | P0 |
 | IM-22 | **Eject card** button, plus an option to eject automatically when an import succeeds. | P1 |
-| IM-23 | **Delete imported photos from the card**: a separate button after a verified import, never a default. It deletes only files that were copied and verified (with a second copy too, if one was asked for), and their sidecars, after a confirmation with the count. Nothing else on the card is touched. | P1 |
-| IM-24 | Glimmr never formats cards; the summary suggests formatting in the camera. | P0 |
+| IM-23 | **Glimmr never deletes, changes or formats anything on a card.** Cards are read-only to Glimmr; the user manages the card (normally by formatting it in the camera). | P0 |
 
 ## 4. Culling
 
@@ -92,7 +91,7 @@ library stays clean:
 | CU-5 | **Bursts:** consecutive photos from one camera less than 2 s apart and visually alike (CLIP similarity ≥ 0.9) are grouped. The filmstrip shows the group, and the cull view can step group by group, opening Compare on a group. | P1 |
 | CU-6 | **Sharpness hint:** a focus score (edge variance in the central area of the preview, and the camera's focus point when the maker notes give it). Shown as a small meter, with *Sort by sharpness* within a burst. A hint only, never automatic. | P2 |
 | CU-7 | Counter: *Picked 112 · Rejected 340 · Unflagged 1,204*, and filters for each. | P0 |
-| CU-8 | **Delete rejects** (`Ctrl/⌘ Backspace`): a review screen shows the rejected photos (RAW, JPEG and sidecars counted), then moves them to the system trash. On a card in Import, rejects are simply not imported, and can be deleted from the card under the same rules as IM-23. | P0 |
+| CU-8 | **Delete rejects** (`Ctrl/⌘ Backspace`): a review screen shows the rejected photos (RAW, JPEG and sidecars counted), then moves them to the system trash. On a card in Import, rejects are simply not imported and stay on the card (IM-23). | P0 |
 | CU-9 | Culling marks apply to both files of a RAW + JPEG pair (§6), and are written to XMP if the user's XMP setting is on. | P0 |
 | CU-10 | Undo (`Ctrl/⌘ Z`) for marks, and for the last trash where the OS lets Glimmr restore it. Otherwise the confirmation says it is in the system trash. | P1 |
 
@@ -129,7 +128,10 @@ here.
 ### 6.1 Model
 
 - **Capture pair**: the files of one exposure, i.e. a RAW, the camera's JPEG/HEIF and their sidecars. They are
-  shown as **one photo**, with the RAW as the primary file (setting: show the JPEG as the cover instead).
+  **one photo** in the catalog: the files are linked by a database record, not merged or renamed.
+  - The **RAW is the main file**: it's what editing, "Open RAW in…" and the photo's identity refer to.
+  - The **camera JPEG is what's displayed**: thumbnails, the grid, the viewer and slideshows. A pair whose JPEG is
+    missing falls back to the RAW's embedded preview.
 - **Versions**: edited or exported files made from a photo (`IMG_1234-Edit.tif`, an export in another folder, a
   Photoshop PSD). They are separate photos linked to their source and shown as a **stack**: the original on top,
   versions behind it with a count badge.
@@ -151,7 +153,7 @@ broken.
 
 | ID | Requirement | Pri |
 |---|---|---|
-| ST-1 | Capture pairs show as one tile with a **RAW+JPEG** badge. The viewer shows the primary, with a toggle between the RAW preview and the camera JPEG. | P0 |
+| ST-1 | Capture pairs show as one tile with a **RAW+JPEG** badge, displaying the camera JPEG. The info panel lists both files with the RAW as the main file. A toggle in the viewer shows the RAW's own preview for comparison. | P0 |
 | ST-2 | Ratings, flags, labels, keywords, albums and culling apply to the whole pair. Setting: "Mark RAW and JPEG separately". | P0 |
 | ST-3 | Moving, renaming and deleting a pair moves, renames or deletes every file in it, with sidecars. *Delete JPEG only* / *Delete RAW only* is in the context menu. | P0 |
 | ST-4 | **Unpair** and **Pair selected** in the context menu. | P1 |
@@ -193,7 +195,7 @@ New and changed tables (catalog version 4):
 
 ## 9. Non-goals
 
-- Formatting cards, or any write to a card except the explicit delete in IM-23.
+- Deleting from, writing to or formatting cards (IM-23).
 - Cataloguing video (videos can be copied during import).
 - Converting to DNG on import.
 - AI closed-eye or face detection. Bursts and the sharpness hint are the culling aids for now.
@@ -222,16 +224,17 @@ New and changed tables (catalog version 4):
 | Phase | Contents |
 |---|---|
 | **1** | Import (IM P0s), cull view with delete rejects (CU P0s), RAW + JPEG pairs (ST-1–3, ST-6, ST-10), folder management (FO P0s), exact and same-picture duplicates |
-| **2** | Same-shot and similar duplicates with merge, versions and stacks, compare and survey, bursts, second copy, rename templates, delete from card, eject, undo, missing-folder relink |
+| **2** | Same-shot and similar duplicates with merge, versions and stacks, compare and survey, bursts, second copy, rename templates, eject, undo, missing-folder relink |
 | **3** | Sharpness hints, import presets and metadata on import, several cards at once |
 
-## 12. Open questions
+## 12. Decisions
 
-1. Should pairs show the RAW or the camera JPEG as the cover by default? Proposed: the RAW (it's the master), with
-   the JPEG preview used for display when the RAW's embedded preview is smaller.
-2. Should Glimmr offer to delete from the card right after import? Proposed: offered, never automatic, and only for
-   verified files.
-3. When culling on the card, should rejects be left on the card or deleted? Proposed: left, with an optional delete
-   in the summary.
-4. Similar-photo threshold: CLIP ViT-B/16 values above are starting points. They will be tuned on a labelled test
+1. **Pairs:** the RAW is the main file; the camera JPEG is what's displayed. The two are linked in the catalog like
+   a database relation, so the RAW can always be found and re-edited from the JPEG.
+2. **Cards:** Glimmr never deletes from a card. The user manages deletions.
+3. **Culling on the card:** rejects aren't imported and stay on the card.
+
+## 13. Open questions
+
+1. Similar-photo threshold: CLIP ViT-B/16 values above are starting points. They will be tuned on a labelled test
    set of bursts, brackets and re-exports before release.
