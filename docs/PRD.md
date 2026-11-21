@@ -103,8 +103,8 @@ Priority: **P0** = v1.0 MVP (built now), **P1** = v1.1, **P2** = later.
 | LIB-5 | Thumbnails (≈400 px) and large previews (≈2048 px) are generated into a cache. RAW uses the largest embedded JPEG preview. | P0 |
 | LIB-6 | Watch library folders for changes and rescan automatically. | P1 |
 | LIB-7 | Relink: when a drive letter/mount point changes, user remaps a library folder root and all photos reconnect. | P0 |
-| LIB-8 | RAW+JPEG pairs can be stacked as one item. | P1 |
-| LIB-9 | Duplicate detection (content hash, then perceptual hash). | P2 |
+| LIB-8 | RAW+JPEG pairs can be stacked as one item. See [IMPORT_PRD.md](IMPORT_PRD.md) §6. | P1 |
+| LIB-9 | Duplicate detection (content hash, then perceptual hash). See [IMPORT_PRD.md](IMPORT_PRD.md) §5. | P2 |
 | LIB-10 | Video files cataloged and playable. | P2 |
 
 ### 7.2 Metadata
