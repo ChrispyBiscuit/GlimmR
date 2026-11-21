@@ -12,12 +12,14 @@ interface Props {
   selected?: boolean
   focused?: boolean
   onClick?: (e: React.MouseEvent) => void
+  /** Dragging a photo (or the selection) onto a folder or album in the sidebar. */
+  onDragStart?: (e: React.DragEvent) => void
   onDoubleClick?: () => void
   tabIndex?: number
 }
 
 /** One frame on the contact sheet. Marks (stars, flag, label) are always visible; the caption appears on hover. */
-export const Tile = memo(function Tile({ photo, width, height, selected, focused, onClick, onDoubleClick, tabIndex = -1 }: Props) {
+export const Tile = memo(function Tile({ photo, width, height, selected, focused, onClick, onDoubleClick, onDragStart, tabIndex = -1 }: Props) {
   const [loaded, setLoaded] = useState(false)
   const [failed, setFailed] = useState(false)
   if (!photo) return <div className="shrink-0 bg-ink/5" style={{ width, height }} />
@@ -30,6 +32,8 @@ export const Tile = memo(function Tile({ photo, width, height, selected, focused
       aria-pressed={selected}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
+      draggable={!!onDragStart}
+      onDragStart={onDragStart}
       className={cn(
         'group relative shrink-0 overflow-hidden bg-ink/5 outline-none focus-visible:outline-none',
         selected && 'ring-2 ring-ink ring-offset-2 ring-offset-canvas',

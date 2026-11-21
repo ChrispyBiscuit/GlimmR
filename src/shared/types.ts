@@ -87,6 +87,23 @@ export interface KeywordNode {
   children: KeywordNode[]
 }
 
+/** A folder inside a library folder: `rel` is its `/`-separated path there ('' is the library folder itself). */
+export interface FolderRef {
+  rootId: number
+  rel: string
+}
+
+export type ConflictChoice = 'skip' | 'keep' | 'replace'
+
+export interface FileOpResult {
+  done: number
+  skipped: number
+  failed: number
+  error?: string
+  /** Where a folder ended up, for folder operations. */
+  ref?: FolderRef
+}
+
 export interface FolderNode {
   key: string
   rootId: number
@@ -305,7 +322,7 @@ export interface RestorePlan {
 
 export interface JobProgress {
   id: string
-  kind: 'scan' | 'backup' | 'restore' | 'xmp' | 'model' | 'tags' | 'print'
+  kind: 'scan' | 'backup' | 'restore' | 'xmp' | 'model' | 'tags' | 'print' | 'files' | 'import'
   label: string
   done: number
   total: number

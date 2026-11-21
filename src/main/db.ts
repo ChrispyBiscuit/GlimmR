@@ -143,6 +143,12 @@ CREATE TABLE IF NOT EXISTS import_files (
   PRIMARY KEY (import_id, source_rel)
 );
 CREATE INDEX IF NOT EXISTS import_files_hash ON import_files(size, quick_hash);
+-- Folders in each library folder, including empty ones (photos' folders are known from the photos table).
+CREATE TABLE IF NOT EXISTS folders (
+  root_id INTEGER NOT NULL REFERENCES roots(id) ON DELETE CASCADE,
+  rel TEXT NOT NULL,
+  PRIMARY KEY (root_id, rel)
+);
 -- Photo pairs the user said aren't duplicates (lower id first).
 CREATE TABLE IF NOT EXISTS not_duplicates (
   a INTEGER NOT NULL REFERENCES photos(id) ON DELETE CASCADE,

@@ -13,6 +13,7 @@ import { previewPage, runOutput } from './print/job'
 import { fontCss, listPrinters, pdfHtml, printHtml } from './print/printer'
 import { displayFile, photoFiles } from './files'
 import { trashSet } from './fileops'
+import { absOf, rootPath, conflictsFor, createFolder, deleteFolder, folderStats, moveFolder, putInFolder, type FolderDeps } from './folders'
 import { removeCached } from './scanner'
 import { driverInfo, openWindowsPreferences } from './print/driver'
 import { Library } from './library'
@@ -21,7 +22,7 @@ import { SORT_FIELDS } from './query'
 import { detectEditors, editorFor, launchEditor, mergeEditors } from './editors'
 import { createBackup, listBackups, mirroredRootPath, readBackup, restoreCatalogFile, verifyBackup } from './backup'
 import type { Api } from '../shared/api'
-import type { Editor, Histogram, JobProgress } from '../shared/types'
+import type { Editor, FileOpResult, Histogram, JobProgress } from '../shared/types'
 import { Updater } from './updater'
 import { generatePreviews, previewPaths } from './previews'
 import { MODEL, Tagger } from './tagging/tagger'
@@ -293,6 +294,22 @@ export function createApi(ctx: AppContext): Api {
     const shown = displayFile(p)
     await generatePreviews(shown.path, shown.ext, exif_orientation, previewPaths(ctx.cacheDir, id), p.edit)
   }
+  const changed = (): void => {
+    ctx.emit('library-changed')
+  }
+  /** Runs a folder operation as a job with progress, returning its result or the error. */
+  const folderJob = async (label: string, fn: (deps: FolderDeps) => Promise<FileOpResult>): Promise<FileOpResult> => {
+    let out: FileOpResult = { done: 0, skipped: 0, failed: 1, error: 'Cancelled.' }
+    await ctx.runJob('files', label, async (report, signal) => {
+      try {
+        out = await fn({ db: lib().db, cacheDir: ctx.cacheDir, trash: (f) => shell.trashItem(f), signal, report })
+      } catch (e) {
+        out = { done: 0, skipped: 0, failed: 1, error: (e as Error).message }
+      }
+    })
+    changed()
+    return out
+  }
   const pickFolder = async (title: string): Promise<string | null> => {
     const r = await dialog.showOpenDialog(ctx.window!, { title, properties: ['openDirectory', 'createDirectory'] })
     return r.canceled ? null : r.filePaths[0]
@@ -506,6 +523,39 @@ export function createApi(ctx: AppContext): Api {
       for (const id of removed) removeCached(ctx.cacheDir, id)
       ctx.emit('library-changed')
       return { trashed, failed: photos.length - trashed, error }
+    },
+
+    folderConflicts: (ids, target) => conflictsFor(lib().db, ids, target),
+    putInFolder: (ids, target, opts) =>
+      folderJob(opts.copy ? 'Copying photos' : 'Moving photos', (deps) => putInFolder(deps, ids, target, opts)),
+    createFolder: async (parent, name) => {
+      try {
+        const ref = createFolder(lib().db, parent, name)
+        changed()
+        return { done: 1, skipped: 0, failed: 0, ref }
+      } catch (e) {
+        return { done: 0, skipped: 0, failed: 1, error: (e as Error).message }
+      }
+    },
+    renameFolder: (folder, name) =>
+      folderJob('Renaming folder', async (deps) => {
+        const parent = { rootId: folder.rootId, rel: folder.rel.includes('/') ? folder.rel.slice(0, folder.rel.lastIndexOf('/')) : '' }
+        return { done: 1, skipped: 0, failed: 0, ref: await moveFolder(deps, folder, parent, { newName: name }) }
+      }),
+    moveFolder: (folder, into, copy) =>
+      folderJob(copy ? 'Copying folder' : 'Moving folder', async (deps) => ({ done: 1, skipped: 0, failed: 0, ref: await moveFolder(deps, folder, into, { copy }) })),
+    folderStats: (folder) => folderStats(lib().db, folder),
+    deleteFolder: (folder) => folderJob('Deleting folder', async (deps) => ({ done: await deleteFolder(deps, folder), skipped: 0, failed: 0 })),
+    sameDrive: (a, b) => {
+      try {
+        return fs.statSync(rootPath(lib().db, a)).dev === fs.statSync(rootPath(lib().db, b)).dev
+      } catch {
+        return true
+      }
+    },
+    revealFolder: (folder) => {
+      const abs = absOf(lib().db, folder)
+      if (fs.existsSync(abs)) void shell.openPath(abs)
     },
 
     printers: () => (ctx.window ? listPrinters(ctx.window.webContents) : Promise.resolve([])),

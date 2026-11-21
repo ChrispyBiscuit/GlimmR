@@ -407,6 +407,8 @@ export class Library {
     const out: FolderNode[] = []
     for (const root of this.listRoots()) {
       const rows = this.db.prepare('SELECT folder, COUNT(*) AS c FROM photos WHERE root_id = ? GROUP BY folder').all(root.id) as { folder: string; c: number }[]
+      // Empty folders (made in Glimmr or found on disk) appear too, with no photos.
+      for (const { rel } of this.db.prepare('SELECT rel FROM folders WHERE root_id = ?').all(root.id) as { rel: string }[]) rows.push({ folder: rel, c: 0 })
       const top: FolderNode = { key: `${root.id}:`, rootId: root.id, relPath: '', name: root.name, count: 0, children: [] }
       const nodes = new Map<string, FolderNode>([['', top]])
       const ensure = (rel: string): FolderNode => {

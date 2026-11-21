@@ -1,8 +1,9 @@
-import { useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { BookImage, ChevronRight, Clock, Flag, Folder, Images, Plus, Sparkles, Tag, WandSparkles, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from '@/components/ui/context-menu'
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuShortcut, ContextMenuTrigger } from '@/components/ui/context-menu'
+import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -12,15 +13,33 @@ import { api } from '../api'
 import { confirmDialog, promptDialog } from '../dialogs'
 import { fmtNum } from '../format'
 import type { FolderNode, KeywordNode, Scope } from '../../../shared/types'
+import { DND_FOLDER, DND_PHOTOS, deleteFolder, moveFolderInto, moveFolderTo, newFolder, putPhotos, refOf, renameFolder } from '../folderOps'
 import { UpdateNotice } from './UpdateNotice'
 
 const sameScope = (a: Scope, b: Scope): boolean => JSON.stringify(a) === JSON.stringify(b)
 
-function NavItem({ icon, label, count, active, onClick, inset = 10 }: { icon?: ReactNode; label: string; count?: number; active?: boolean; onClick: () => void; inset?: number }) {
+function NavItem({
+  icon,
+  label,
+  count,
+  active,
+  onClick,
+  onKeyDown,
+  inset = 10
+}: {
+  icon?: ReactNode
+  label: string
+  count?: number
+  active?: boolean
+  onClick: () => void
+  onKeyDown?: (e: React.KeyboardEvent) => void
+  inset?: number
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
+      onKeyDown={onKeyDown}
       aria-current={active ? 'page' : undefined}
       style={{ paddingLeft: inset }}
       className={cn(
@@ -59,7 +78,9 @@ function TreeItem<T extends { children: T[] }>({
   icon,
   active,
   onSelect,
-  menu
+  menu,
+  dnd,
+  onKeyDown
 }: {
   node: T
   depth: number
@@ -69,10 +90,54 @@ function TreeItem<T extends { children: T[] }>({
   active: (n: T) => boolean
   onSelect: (n: T) => void
   menu?: (n: T) => ReactNode
+  /** Drag and drop: what a row carries when dragged, and what happens when something is dropped on it. */
+  dnd?: { start?: (n: T, e: React.DragEvent) => void; accepts: (e: React.DragEvent) => boolean; drop: (n: T, e: React.DragEvent) => void }
+  onKeyDown?: (n: T, e: React.KeyboardEvent) => void
 }) {
   const [open, setOpen] = useState(depth === 0 && node.children.length < 12)
+  const [over, setOver] = useState(false)
+  const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const row = (
-    <div className="flex items-center">
+    <div
+      className={cn('flex items-center rounded-md', over && 'bg-accent ring-1 ring-ink/40')}
+      draggable={!!dnd?.start}
+      onDragStart={dnd?.start ? (e) => dnd.start!(node, e) : undefined}
+      onDragOver={
+        dnd
+          ? (e) => {
+              if (!dnd.accepts(e)) return
+              e.preventDefault()
+              e.stopPropagation()
+              e.dataTransfer.dropEffect = e.altKey ? 'copy' : 'move'
+              if (!over) {
+                setOver(true)
+                // Hovering a closed folder while dragging opens it, so you can drop deeper.
+                if (!open && node.children.length) openTimer.current = setTimeout(() => setOpen(true), 700)
+              }
+            }
+          : undefined
+      }
+      onDragLeave={
+        dnd
+          ? () => {
+              setOver(false)
+              if (openTimer.current) clearTimeout(openTimer.current)
+            }
+          : undefined
+      }
+      onDrop={
+        dnd
+          ? (e) => {
+              setOver(false)
+              if (openTimer.current) clearTimeout(openTimer.current)
+              if (!dnd.accepts(e)) return
+              e.preventDefault()
+              e.stopPropagation()
+              dnd.drop(node, e)
+            }
+          : undefined
+      }
+    >
       {node.children.length > 0 ? (
         <button
           type="button"
@@ -88,7 +153,7 @@ function TreeItem<T extends { children: T[] }>({
         <span style={{ marginLeft: depth * 14 }} className="size-5 shrink-0" />
       )}
       <div className="min-w-0 flex-1">
-        <NavItem icon={icon} label={label(node)} count={count(node)} active={active(node)} onClick={() => onSelect(node)} inset={4} />
+        <NavItem icon={icon} label={label(node)} count={count(node)} active={active(node)} onClick={() => onSelect(node)} onKeyDown={onKeyDown ? (e) => onKeyDown(node, e) : undefined} inset={4} />
       </div>
     </div>
   )
@@ -102,10 +167,15 @@ function TreeItem<T extends { children: T[] }>({
       ) : (
         row
       )}
-      {open && node.children.map((c, i) => <TreeItem key={i} node={c} depth={depth + 1} label={label} count={count} icon={icon} active={active} onSelect={onSelect} menu={menu} />)}
+      {open &&
+        node.children.map((c, i) => (
+          <TreeItem key={i} node={c} depth={depth + 1} label={label} count={count} icon={icon} active={active} onSelect={onSelect} menu={menu} dnd={dnd} onKeyDown={onKeyDown} />
+        ))}
     </>
   )
 }
+
+const mac = navigator.platform.toLowerCase().includes('mac')
 
 export function Sidebar({ onAddFolder }: { onAddFolder: () => void }) {
   const s = useStore()
@@ -136,6 +206,63 @@ export function Sidebar({ onAddFolder }: { onAddFolder: () => void }) {
 
   const jobs = Object.values(s.jobs)
 
+  // ---- folders: drag and drop, and the context menu ----
+  const after = (): void => {
+    void s.refreshSidebar()
+    s.refreshResults()
+  }
+  const folderDnd = {
+    start: (n: FolderNode, e: React.DragEvent) => {
+      if (!n.relPath) return e.preventDefault()
+      e.dataTransfer.setData(DND_FOLDER, JSON.stringify(refOf(n)))
+      e.dataTransfer.effectAllowed = 'copyMove'
+    },
+    accepts: (e: React.DragEvent) => e.dataTransfer.types.includes(DND_PHOTOS) || e.dataTransfer.types.includes(DND_FOLDER),
+    drop: (n: FolderNode, e: React.DragEvent) => {
+      const copy = e.altKey
+      const shift = e.shiftKey
+      const photos = e.dataTransfer.getData(DND_PHOTOS)
+      const folder = e.dataTransfer.getData(DND_FOLDER)
+      if (photos) {
+        const { ids, rootId } = JSON.parse(photos) as { ids: number[]; rootId: number }
+        void putPhotos(ids, refOf(n), s.folders, { copy, fromRoot: rootId, shift }).then(after)
+      } else if (folder) void moveFolderInto(JSON.parse(folder), refOf(n), s.folders, { copy, shift }).then(after)
+    }
+  }
+  const navigateTo = (rootId: number, rel: string): void => {
+    s.navigate({ type: 'folder', rootId, relPath: rel }, rel.split('/').pop() || '')
+  }
+  const create = async (n: FolderNode): Promise<void> => {
+    const ref = await newFolder(refOf(n))
+    after()
+    if (ref) navigateTo(ref.rootId, ref.rel)
+  }
+  const rename = async (n: FolderNode): Promise<void> => {
+    const ref = await renameFolder(refOf(n), n.name)
+    after()
+    // Stay in the folder after renaming it.
+    if (ref && is({ type: 'folder', rootId: n.rootId, relPath: n.relPath })) navigateTo(ref.rootId, ref.rel)
+  }
+  const remove = async (n: FolderNode): Promise<void> => {
+    const viewing = browsing && s.scope.type === 'folder' && s.scope.rootId === n.rootId && (s.scope.relPath === n.relPath || s.scope.relPath.startsWith(`${n.relPath}/`))
+    if (await deleteFolder(refOf(n), n.name)) {
+      after()
+      if (viewing) s.navigate({ type: 'all' }, 'Photos')
+    }
+  }
+  const removeRoot = async (n: FolderNode): Promise<void> => {
+    const ok = await confirmDialog({
+      title: `Remove “${n.name}” from the library?`,
+      description: `Glimmr forgets its ${fmtNum(n.count)} photos, with their ratings, keywords and albums in the catalog. Nothing on disk is changed or deleted, and you can add the folder again.`,
+      confirmLabel: 'Remove from Library',
+      destructive: true
+    })
+    if (!ok) return
+    await api.removeRoot(n.rootId)
+    after()
+    s.navigate({ type: 'all' }, 'Photos')
+  }
+
   return (
     <aside className="flex min-h-0 flex-col border-r bg-panel" aria-label="Library">
       <nav className="scroll-thin min-h-0 flex-1 overflow-y-auto px-2 pt-4 pb-4">
@@ -163,7 +290,26 @@ export function Sidebar({ onAddFolder }: { onAddFolder: () => void }) {
           {s.albums.map((a) => (
             <ContextMenu key={a.id}>
               <ContextMenuTrigger asChild>
-                <div>
+                <div
+                  className="rounded-md data-[over=true]:bg-accent data-[over=true]:ring-1 data-[over=true]:ring-ink/40"
+                  onDragOver={(e) => {
+                    if (!e.dataTransfer.types.includes(DND_PHOTOS)) return
+                    e.preventDefault()
+                    e.dataTransfer.dropEffect = 'link'
+                    e.currentTarget.dataset.over = 'true'
+                  }}
+                  onDragLeave={(e) => delete e.currentTarget.dataset.over}
+                  onDrop={async (e) => {
+                    delete e.currentTarget.dataset.over
+                    const data = e.dataTransfer.getData(DND_PHOTOS)
+                    if (!data) return
+                    e.preventDefault()
+                    const { ids } = JSON.parse(data) as { ids: number[] }
+                    await api.addToAlbum(a.id, ids)
+                    toast.success(`Added ${ids.length === 1 ? '1 photo' : `${fmtNum(ids.length)} photos`} to “${a.name}”`)
+                    void s.refreshSidebar()
+                  }}
+                >
                   <NavItem icon={<BookImage />} label={a.name} count={a.count} active={is({ type: 'album', id: a.id })} onClick={() => s.navigate({ type: 'album', id: a.id }, a.name)} />
                 </div>
               </ContextMenuTrigger>
@@ -259,6 +405,43 @@ export function Sidebar({ onAddFolder }: { onAddFolder: () => void }) {
               count={(n) => n.count}
               active={(n) => is({ type: 'folder', rootId: n.rootId, relPath: n.relPath })}
               onSelect={(n) => s.navigate({ type: 'folder', rootId: n.rootId, relPath: n.relPath }, n.name)}
+              dnd={folderDnd}
+              onKeyDown={(n, e) => {
+                if (e.key === 'F2' && n.relPath) {
+                  e.preventDefault()
+                  void rename(n)
+                } else if ((e.key === 'Delete' || (mac && e.key === 'Backspace' && e.metaKey)) && n.relPath) {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  void remove(n)
+                }
+              }}
+              menu={(n) => (
+                <ContextMenuContent className="w-56">
+                  <ContextMenuItem onSelect={() => void create(n)}>New Folder…</ContextMenuItem>
+                  {n.relPath && (
+                    <>
+                      <ContextMenuItem onSelect={() => void rename(n)}>
+                        Rename…<ContextMenuShortcut>F2</ContextMenuShortcut>
+                      </ContextMenuItem>
+                      <ContextMenuItem onSelect={() => void moveFolderTo(refOf(n), s.folders).then(after)}>Move to…</ContextMenuItem>
+                      <ContextMenuItem onSelect={() => void moveFolderTo(refOf(n), s.folders, true).then(after)}>Copy to…</ContextMenuItem>
+                    </>
+                  )}
+                  <ContextMenuItem onSelect={() => api.revealFolder(refOf(n))}>{mac ? 'Show in Finder' : 'Show in Explorer'}</ContextMenuItem>
+                  <ContextMenuItem onSelect={() => api.rescan(n.rootId)}>Rescan</ContextMenuItem>
+                  <ContextMenuSeparator />
+                  {n.relPath ? (
+                    <ContextMenuItem variant="destructive" onSelect={() => void remove(n)}>
+                      Move to {mac ? 'Trash' : 'Recycle Bin'}…<ContextMenuShortcut>{mac ? '⌘⌫' : 'Del'}</ContextMenuShortcut>
+                    </ContextMenuItem>
+                  ) : (
+                    <ContextMenuItem variant="destructive" onSelect={() => void removeRoot(n)}>
+                      Remove from Library…
+                    </ContextMenuItem>
+                  )}
+                </ContextMenuContent>
+              )}
             />
           ))}
         </Section>

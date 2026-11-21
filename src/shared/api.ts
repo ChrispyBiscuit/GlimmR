@@ -19,6 +19,9 @@ import type {
   SearchRequest,
   SearchResult,
   Histogram,
+  ConflictChoice,
+  FileOpResult,
+  FolderRef,
   IccProfile,
   PrinterInfo,
   DriverInfo,
@@ -111,6 +114,22 @@ export interface Api {
 
   /** Moves photos (and sidecars only they use) to the system trash and removes them from the catalog. */
   trashPhotos(ids: number[], part?: 'all' | 'raw' | 'jpeg'): Promise<{ trashed: number; failed: number; error?: string }>
+
+  // folder management (moves happen on disk and in the catalog together)
+  /** Photos whose files would clash with files already in the folder. */
+  folderConflicts(ids: number[], target: FolderRef): { id: number; name: string }[]
+  /** Moves or copies photos (with their RAW + JPEG pair and sidecars) into a folder. */
+  putInFolder(ids: number[], target: FolderRef, opts: { copy: boolean; onConflict: ConflictChoice }): Promise<FileOpResult>
+  createFolder(parent: FolderRef, name: string): Promise<FileOpResult>
+  renameFolder(folder: FolderRef, name: string): Promise<FileOpResult>
+  /** Moves or copies a folder, with everything in it, into another folder. */
+  moveFolder(folder: FolderRef, into: FolderRef, copy: boolean): Promise<FileOpResult>
+  folderStats(folder: FolderRef): { photos: number; files: number; bytes: number }
+  /** Sends a folder and everything in it to the system trash. */
+  deleteFolder(folder: FolderRef): Promise<FileOpResult>
+  revealFolder(folder: FolderRef): void
+  /** Whether two library folders are on the same drive (moves between drives copy by default). */
+  sameDrive(a: number, b: number): boolean
 
   // printing
   printers(): Promise<PrinterInfo[]>

@@ -9,6 +9,7 @@ import { cullingUpdate, isTyping } from '../culling'
 import { buildLayout, GAP, type LayoutRow } from '../layout'
 import { fmtNum, monthLabel } from '../format'
 import { Tile } from './Tile'
+import { DND_PHOTOS, movePhotosTo } from '../folderOps'
 
 const mac = navigator.userAgent.includes('Mac')
 const PAD = 20
@@ -237,6 +238,23 @@ export function PhotoGrid() {
   const currentYear = [...years].reverse().find((y) => y.row <= currentRow + 1)?.year
 
   const menuIds = menuId == null ? [] : s.selected.has(menuId) ? s.targets : [menuId]
+  const afterMove = (): void => {
+    void s.refreshSidebar()
+    s.refreshResults()
+  }
+  /** Drags the selection (or just this photo, when it isn't selected) to a folder or album in the sidebar. */
+  const dragPhotos = (id: number, e: React.DragEvent): void => {
+    const ids = s.selected.has(id) ? s.targets : [id]
+    e.dataTransfer.setData(DND_PHOTOS, JSON.stringify({ ids, rootId: s.cache.get(id)?.rootId }))
+    e.dataTransfer.effectAllowed = 'copyMove'
+    // A small label instead of a big tile image, with the count.
+    const label = document.createElement('div')
+    label.textContent = ids.length === 1 ? (s.cache.get(id)?.filename ?? '1 photo') : `${ids.length.toLocaleString()} photos`
+    Object.assign(label.style, { position: 'fixed', top: '-100px', padding: '4px 10px', borderRadius: '999px', background: '#222', color: '#fff', font: '12px sans-serif' })
+    document.body.appendChild(label)
+    e.dataTransfer.setDragImage(label, -12, -12)
+    setTimeout(() => label.remove(), 0)
+  }
   const editors = s.settings?.editors.editors ?? []
 
   if (!s.ids.length) {
@@ -299,6 +317,7 @@ export function PhotoGrid() {
                               tabIndex={s.focusIndex === it.index || (s.focusIndex < 0 && it.index === 0) ? 0 : -1}
                               onClick={(e) => onTileClick(it.index, e)}
                               onDoubleClick={() => openViewer(it.index)}
+                              onDragStart={(e) => dragPhotos(id, e)}
                             />
                           )
                         })}
@@ -358,6 +377,8 @@ export function PhotoGrid() {
               Remove from This Album
             </ContextMenuItem>
           )}
+          <ContextMenuItem onSelect={() => void movePhotosTo(menuIds, s.folders, false, s.cache.get(menuIds[0])?.rootId).then(afterMove)}>Move to Folder…</ContextMenuItem>
+          <ContextMenuItem onSelect={() => void movePhotosTo(menuIds, s.folders, true, s.cache.get(menuIds[0])?.rootId).then(afterMove)}>Copy to Folder…</ContextMenuItem>
           <ContextMenuItem onSelect={() => s.openPrint(menuIds)}>
             Print…<ContextMenuShortcut>{mac ? '⌘P' : 'Ctrl+P'}</ContextMenuShortcut>
           </ContextMenuItem>

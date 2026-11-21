@@ -108,7 +108,7 @@ function useStoreValue() {
         // Jobs can change settings in the main process (e.g. last backup time).
         void api.getSettings().then(setSettingsState)
         // The print workspace reports its own results.
-        if (p.kind === 'print') return
+        if (p.kind === 'print' || p.kind === 'files' || p.kind === 'import') return
         if (p.error) toast.error(p.label, { description: p.error, duration: 8000 })
         // Scans and tagging run often in the background; only mention the ones that changed something notable.
         else if (p.kind === 'tags' ? p.total >= 100 : p.kind !== 'scan' || (p.message && !p.message.startsWith('0 new, 0 updated')))

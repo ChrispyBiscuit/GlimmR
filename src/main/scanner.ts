@@ -61,7 +61,7 @@ async function captureTime(file: string): Promise<number | null> {
   }
 }
 
-export async function walk(root: string, signal?: AbortSignal): Promise<FoundFile[]> {
+export async function walk(root: string, signal?: AbortSignal, dirs?: string[]): Promise<FoundFile[]> {
   const out: FoundFile[] = []
   const stack = ['']
   while (stack.length) {
@@ -77,7 +77,10 @@ export async function walk(root: string, signal?: AbortSignal): Promise<FoundFil
       if (ent.name.startsWith('.')) continue
       const childRel = rel ? `${rel}/${ent.name}` : ent.name
       if (ent.isDirectory()) {
-        if (!SKIP_DIRS.has(ent.name.toLowerCase()) && !ent.name.endsWith('.lrdata') && !ent.name.endsWith('.cosessiondb')) stack.push(childRel)
+        if (!SKIP_DIRS.has(ent.name.toLowerCase()) && !ent.name.endsWith('.lrdata') && !ent.name.endsWith('.cosessiondb') && ent.name.toLowerCase() !== 'captureone') {
+          stack.push(childRel)
+          dirs?.push(childRel)
+        }
         continue
       }
       if (!ent.isFile()) continue
@@ -242,7 +245,8 @@ async function mapLimit<T>(items: T[], limit: number, fn: (item: T, index: numbe
 
 export async function scanRoot(db: Db, rootId: number, rootPath: string, opts: ScanOptions): Promise<ScanResult> {
   opts.onProgress?.(0, 0, 'Looking for photos…')
-  const found = await walk(rootPath, opts.signal)
+  const dirs: string[] = []
+  const found = await walk(rootPath, opts.signal, dirs)
   const existing = new Map<string, { id: number; size: number; mtime: number; has_preview: number; companion: string | null }>()
   for (const r of db.prepare('SELECT id, rel_path, size, mtime, has_preview, companion FROM photos WHERE root_id = ?').all(rootId) as any[]) existing.set(r.rel_path, r)
   // A RAW and a camera JPEG of the same name become one photo, unless both carry capture times more than 2 s apart.
@@ -333,6 +337,14 @@ export async function scanRoot(db: Db, rootId: number, rootPath: string, opts: S
     },
     opts.signal
   )
+  if (!opts.signal?.aborted && fs.existsSync(rootPath)) {
+    // Every folder on disk, empty ones too, so the sidebar shows them.
+    tx(db, () => {
+      db.prepare('DELETE FROM folders WHERE root_id = ?').run(rootId)
+      const ins = db.prepare('INSERT OR IGNORE INTO folders (root_id, rel) VALUES (?, ?)')
+      for (const d of dirs) ins.run(rootId, d)
+    })
+  }
   if (!opts.signal?.aborted) {
     const missing = [...existing.values()].filter((e) => !seen.has(e.id) && db.prepare('SELECT 1 FROM photos WHERE id = ?').get(e.id)).map((e) => e.id)
     const mark = db.prepare('UPDATE photos SET offline = 1 WHERE id = ?')
