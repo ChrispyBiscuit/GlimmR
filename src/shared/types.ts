@@ -224,7 +224,8 @@ export interface AppSettings {
   print: { last: Partial<PrintSettings>; presets: PrintPreset[] }
   import: ImportSettings
   /** Experimental features, off by default. */
-  labs: { develop: boolean }
+  /** Edit photos in Glimmr (the Develop view) as the default edit action; external editors stay in the menus. */
+  develop: boolean
 }
 
 export interface DuplicatePhoto extends Photo {

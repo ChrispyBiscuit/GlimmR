@@ -155,6 +155,13 @@ function createWindow(): void {
   })
   ctx.window = win
   win.once('ready-to-show', () => win.show())
+  // The hidden render window would otherwise keep the app running (no 'window-all-closed') after the main window
+  // closes, and a relaunch would then reach a destroyed window.
+  win.on('closed', () => {
+    if (ctx.window === win) ctx.window = null
+    ctx.renderer.close()
+    if (process.platform !== 'darwin') app.quit()
+  })
   win.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url)
     return { action: 'deny' }
@@ -196,10 +203,18 @@ app.whenReady().then(() => {
 })
 
 app.on('second-instance', () => {
-  if (ctx.window) {
-    if (ctx.window.isMinimized()) ctx.window.restore()
-    ctx.window.focus()
+  const win = ctx.window
+  if (!win || win.isDestroyed()) {
+    if (app.isReady()) createWindow()
+    return
   }
+  if (win.isMinimized()) win.restore()
+  win.focus()
+})
+
+// macOS: clicking the Dock icon with no window open brings one back.
+app.on('activate', () => {
+  if (app.isReady() && (!ctx.window || ctx.window.isDestroyed())) createWindow()
 })
 
 let quitting = false

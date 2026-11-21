@@ -148,7 +148,7 @@ export function SelectionBar() {
         </TooltipTrigger>
         <TooltipContent className="max-w-60">Writes stars, labels, keywords and captions to sidecar files that Lightroom and Capture One read.</TooltipContent>
       </Tooltip>
-      <Button size="sm" onClick={() => void s.openEditor(ids)}>
+      <Button size="sm" onClick={() => (s.settings?.develop ? s.openDevelop(ids, 0) : void s.openEditor(ids))} title={s.settings?.develop ? 'Edit in Glimmr' : 'Open in your editor'}>
         <Pencil data-icon="inline-start" />
         Edit
         <span className="text-xs opacity-60">{mac ? '⌘E' : 'Ctrl+E'}</span>

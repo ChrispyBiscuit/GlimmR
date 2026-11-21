@@ -6,7 +6,7 @@
 | Platforms | Windows and macOS (Linux where it comes free) |
 | Research | [DEVELOP_RESEARCH.md](DEVELOP_RESEARCH.md) |
 | Branch | `claude/develop-module`, kept separate until it proves itself (see §3) |
-| Status | Phase 1 built on the branch, behind Settings → Labs → Develop. See §15 |
+| Status | Phase 1 released in 1.0.11; the default edit action from 1.0.12 (Settings → Editors). See §15 |
 
 ## 1. Goal
 
@@ -202,7 +202,7 @@ each is judged before the next starts.
 
 ## 15. Phase 1 status
 
-Built on `claude/develop-module`, off by default (Settings → Labs → Develop). Nothing is released from the branch.
+Released in 1.0.11 behind a Labs switch. From 1.0.12 it's on by default and is what Edit and `Ctrl/⌘ E` do; your own editor stays in the Edit menu and Open With (`Ctrl/⌘ Alt E`). Settings → Editors → Edit in Glimmr turns it off.
 
 **Done**
 

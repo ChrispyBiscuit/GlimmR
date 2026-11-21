@@ -236,7 +236,7 @@ Electron main (Node)                                    Renderer (React + shadcn
 | `0`–`5` | Star rating |
 | `P` / `X` / `U` | Pick / reject / unflag |
 | `6`–`9` | Red / yellow / green / blue label |
-| `Ctrl/⌘ E` | Open in editor |
+| `Ctrl/⌘ E` | Edit in Glimmr; `Ctrl/⌘ Alt E` opens your own editor (or `Ctrl/⌘ E`, with Edit in Glimmr off) |
 | `Delete` / `Backspace` | Move to the Recycle Bin / Trash (asks first) |
 | `R` | Crop and rotate (viewer); `Enter` saves, `Esc` cancels |
 | `Ctrl/⌘ P` | Print the selection or the current photo |
@@ -249,11 +249,11 @@ Electron main (Node)                                    Renderer (React + shadcn
 | `Alt ←` / `Alt →` (Windows), `⌘ [` / `⌘ ]` (macOS), mouse side buttons | Back / forward |
 | `Ctrl/⌘` + scroll, or pinch | Photo size in the grid |
 
-With Settings → Labs → Develop on:
+Editing in Glimmr (on by default; Settings → Editors):
 
 | Key | Action |
 |---|---|
-| `D` | Develop the photo (grid or viewer) |
+| `D` or `Ctrl/⌘ E` | Edit the photo (grid or viewer) |
 | `\` / `Y` | Before / split before and after |
 | `J` | Clipping overlay |
 | `W` | White balance picker |
@@ -289,8 +289,8 @@ v1.0 MVP: the PRD's P0 requirements are implemented, with these gaps:
   the sidebar instead.
 - Performance targets are met for most queries; see the table above.
 
-Develop (editing, styles and LUTs, export) is in progress on the `claude/develop-module` branch, behind
-Settings → Labs. See [docs/DEVELOP_PRD.md](docs/DEVELOP_PRD.md) §15.
+Editing in Glimmr (Develop: adjustments, styles and LUTs, export) is the default edit action since 1.0.12. It can
+be turned off in Settings → Editors. See [docs/DEVELOP_PRD.md](docs/DEVELOP_PRD.md) §15.
 
 Planned next (P1): folder watching, RAW+JPEG stacking, map view, color search, compare view and automatic XMP
 writing.

@@ -27,7 +27,6 @@ const SECTIONS = [
   { key: 'smart-tags', label: 'Smart tags' },
   { key: 'printing', label: 'Printing' },
   { key: 'appearance', label: 'Appearance' },
-  { key: 'labs', label: 'Labs' },
   { key: 'updates', label: 'Updates' },
   { key: 'help', label: 'Search help' }
 ]
@@ -196,11 +195,28 @@ function EditorsSection() {
       title="Editors"
       intro={
         <>
-          Glimmr doesn’t edit photos. Press <Kbd>{mac ? '⌘' : 'Ctrl'}&nbsp;E</Kbd> to open the selection in your editor. Lightroom Classic and Capture One open their import window for files that
-          aren’t in their catalog yet.
+          {s.settings!.develop ? (
+            <>
+              Press <Kbd>{mac ? '⌘' : 'Ctrl'}&nbsp;E</Kbd> (or <Kbd>D</Kbd>) to edit in Glimmr. Other editors are in the Edit menu and Open With, or <Kbd>{mac ? '⌥⌘' : 'Ctrl+Alt'}&nbsp;E</Kbd>.
+            </>
+          ) : (
+            <>
+              Press <Kbd>{mac ? '⌘' : 'Ctrl'}&nbsp;E</Kbd> to open the selection in your editor.
+            </>
+          )}{' '}
+          Lightroom Classic and Capture One open their import window for files that aren’t in their catalog yet.
         </>
       }
     >
+      <div className="mb-6">
+        <Setting
+          label="Edit in Glimmr"
+          description="White balance, exposure and tone, curves, colour, sharpening and noise, styles and LUTs, and export. Raw files develop from their raw data. Edits are kept in the catalog and never change your files. Turn this off to make your own editor the default; edits already made stay on the photos."
+          htmlFor="develop-on"
+        >
+          <Switch id="develop-on" checked={s.settings!.develop} onCheckedChange={(v) => s.setSettings({ develop: v })} />
+        </Setting>
+      </div>
       <ul className="divide-y rounded-md border bg-raised">
         {ed.editors.length === 0 && <li className="p-4 text-[13px] text-ink-muted">No editors found on this computer. Add one below.</li>}
         {ed.editors.map((e) => (
@@ -524,24 +540,6 @@ function AppearanceSection() {
         </Setting>
         <Setting label="Move to the next photo after marking" description="After you rate, flag or label one photo, the next one is selected." htmlFor="auto-advance">
           <Switch id="auto-advance" checked={st.autoAdvance} onCheckedChange={(v) => s.setSettings({ autoAdvance: v })} />
-        </Setting>
-      </div>
-    </Page>
-  )
-}
-
-function LabsSection() {
-  const s = useStore()
-  const st = s.settings!
-  return (
-    <Page title="Labs" intro="Features still being built. They may change, and you can turn them off at any time.">
-      <div>
-        <Setting
-          label="Develop"
-          description="Edit photos in Glimmr: white balance, exposure and tone, curves, colour, sharpening and noise, styles and LUTs (.cube and .3dl), and export. Raw files develop from their raw data. Edits are kept in the catalog and never change your files. Turning this off hides the tools; edits already made stay on the photos."
-          htmlFor="labs-develop"
-        >
-          <Switch id="labs-develop" checked={st.labs.develop} onCheckedChange={(v) => s.setSettings({ labs: { ...st.labs, develop: v } })} />
         </Setting>
       </div>
     </Page>
@@ -896,7 +894,7 @@ function HelpSection() {
 export function SettingsPage() {
   const s = useStore()
   if (!s.settings) return null
-  const Section = { library: LibrarySection, editors: EditorsSection, backup: BackupSection, 'smart-tags': SmartTagsSection, printing: PrintingSection, appearance: AppearanceSection, labs: LabsSection, updates: UpdatesSection, help: HelpSection }[s.settingsSection] ?? LibrarySection
+  const Section = { library: LibrarySection, editors: EditorsSection, backup: BackupSection, 'smart-tags': SmartTagsSection, printing: PrintingSection, appearance: AppearanceSection, updates: UpdatesSection, help: HelpSection }[s.settingsSection] ?? LibrarySection
   return (
     <div className="flex h-full flex-col">
       <div className="flex min-h-0 flex-1">

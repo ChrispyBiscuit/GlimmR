@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, Crop, Flag, FolderOpen, Info, Pause, Pencil, Play, Printer, SlidersHorizontal, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuShortcut, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Slider } from '@/components/ui/slider'
 import { Textarea } from '@/components/ui/textarea'
@@ -237,11 +237,13 @@ export function Viewer() {
           s.setViewer(ids.length ? { ...v, ids, index: Math.min(v.index, ids.length - 1) } : null)
         })
       }
-      if (mod && e.key.toLowerCase() === 'e') {
+      // Ctrl/⌘ E edits in Glimmr (when on); with Alt, or when it's off, opens the external editor.
+      if (mod && e.key.toLowerCase() === 'e' && !e.shiftKey) {
         e.preventDefault()
+        if (develop && !e.altKey) return photo && !photo.offline ? openDevelop() : undefined
         return void s.openEditor([id])
       }
-      if (!mod && e.key.toLowerCase() === 'd' && s.settings?.labs.develop && photo && !photo.offline) return openDevelop()
+      if (!mod && e.key.toLowerCase() === 'd' && develop && photo && !photo.offline) return openDevelop()
       if (mod && e.key.toLowerCase() === 'p') {
         e.preventDefault()
         return s.openPrint([id])
@@ -303,6 +305,7 @@ export function Viewer() {
   const src = photo ? (showRaw && photo.companion ? `glimmr://raw/${photo.id}?v=${photo.rev}` : hiRes ? originalUrl(photo.id, photo.rev) : previewUrl(photo.id, photo.rev)) : undefined
   const editors = s.settings?.editors.editors ?? []
   const defaultEditor = editors.find((e) => e.id === s.settings?.editors.defaultEditor)
+  const develop = !!s.settings?.develop
   const searchFor = (q: string): void => {
     s.setViewer(null)
     s.navigate({ type: 'all' }, 'Photos', q)
@@ -390,22 +393,18 @@ export function Viewer() {
                   </button>
                 ))}
               </div>
-              {s.settings?.labs.develop && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button size="sm" variant="secondary" disabled={photo.offline} onClick={openDevelop}>
-                      <SlidersHorizontal data-icon="inline-start" />
-                      Develop
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Edit in Glimmr (D)</TooltipContent>
-                </Tooltip>
-              )}
               <div className="flex">
-                <Button size="sm" className="rounded-r-none" onClick={() => void s.openEditor([id])}>
-                  <Pencil data-icon="inline-start" />
-                  {defaultEditor ? `Edit in ${defaultEditor.name}` : 'Edit'}
-                </Button>
+                {develop ? (
+                  <Button size="sm" className="rounded-r-none" disabled={photo.offline} onClick={openDevelop} title={`Edit in Glimmr (${mac ? '⌘E' : 'Ctrl+E'} or D)`}>
+                    <SlidersHorizontal data-icon="inline-start" />
+                    Edit
+                  </Button>
+                ) : (
+                  <Button size="sm" className="rounded-r-none" onClick={() => void s.openEditor([id])}>
+                    <Pencil data-icon="inline-start" />
+                    {defaultEditor ? `Edit in ${defaultEditor.name}` : 'Edit'}
+                  </Button>
+                )}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button size="icon-sm" className="rounded-l-none border-l border-black/20" aria-label="Choose an editor">
@@ -413,7 +412,22 @@ export function Viewer() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    {editors.map((e) => (
+                    {develop && (
+                      <>
+                        <DropdownMenuItem disabled={photo.offline} onSelect={openDevelop}>
+                          Edit in Glimmr
+                          <DropdownMenuShortcut>{mac ? '⌘E' : 'Ctrl+E'}</DropdownMenuShortcut>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                      </>
+                    )}
+                    {develop && defaultEditor && (
+                      <DropdownMenuItem onSelect={() => void s.openEditor([id])}>
+                        Open in {defaultEditor.name}
+                        <DropdownMenuShortcut>{mac ? '⌥⌘E' : 'Ctrl+Alt+E'}</DropdownMenuShortcut>
+                      </DropdownMenuItem>
+                    )}
+                    {editors.filter((e) => !(develop && e.id === defaultEditor?.id)).map((e) => (
                       <DropdownMenuItem key={e.id} onSelect={() => void s.openEditor([id], e.id)}>
                         Open in {e.name}
                       </DropdownMenuItem>

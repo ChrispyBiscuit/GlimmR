@@ -26,7 +26,7 @@ export function PhotoGrid() {
   const [menuId, setMenuId] = useState<number | null>(null)
   const [exportIds, setExportIds] = useState<number[] | null>(null)
   const [styles, setStyles] = useState<StyleInfo[]>([])
-  const labs = !!s.settings?.labs.develop
+  const developOn = !!s.settings?.develop
   const target = s.thumbSize
   const groupByMonth = ['default', 'taken'].includes(s.sort.field) && s.scope.type !== 'smart'
 
@@ -226,20 +226,22 @@ export function PhotoGrid() {
         e.preventDefault()
         return s.setSelected(new Set(s.ids))
       }
-      if (mod && e.key.toLowerCase() === 'e') {
+      // Ctrl/⌘ E edits in Glimmr (when on); with Alt, or when it's off, opens the external editor.
+      if (mod && e.key.toLowerCase() === 'e' && !e.shiftKey) {
         e.preventDefault()
+        if (developOn && !e.altKey) return f >= 0 ? openDevelop(f) : undefined
         return void s.openEditor(s.targets)
       }
       if (mod && e.key.toLowerCase() === 'p') {
         e.preventDefault()
         return s.openPrint(s.targets)
       }
-      if (labs && !mod && e.key.toLowerCase() === 'd' && f >= 0) return openDevelop(f)
-      if (labs && mod && e.shiftKey && e.key.toLowerCase() === 'v' && s.targets.length) {
+      if (developOn && !mod && e.key.toLowerCase() === 'd' && f >= 0) return openDevelop(f)
+      if (developOn && mod && e.shiftKey && e.key.toLowerCase() === 'v' && s.targets.length) {
         e.preventDefault()
         return pasteDevelop(s.targets)
       }
-      if (labs && mod && e.shiftKey && e.key.toLowerCase() === 'e' && s.targets.length) {
+      if (developOn && mod && e.shiftKey && e.key.toLowerCase() === 'e' && s.targets.length) {
         e.preventDefault()
         return setExportIds(s.targets)
       }
@@ -316,7 +318,7 @@ export function PhotoGrid() {
               const id = Number((e.target as HTMLElement).closest<HTMLElement>('[data-id]')?.dataset.id)
               if (!id) return e.preventDefault()
               setMenuId(id)
-              if (labs) void api.styles().then(setStyles)
+              if (developOn) void api.styles().then(setStyles)
               if (!s.selected.has(id)) {
                 s.setSelected(new Set([id]))
                 s.setFocusIndex(s.ids.indexOf(id))
@@ -362,10 +364,10 @@ export function PhotoGrid() {
         </ContextMenuTrigger>
         <ContextMenuContent className="w-60">
           <ContextMenuItem onSelect={() => menuId != null && openViewer(s.ids.indexOf(menuId))}>View</ContextMenuItem>
-          {labs && (
+          {developOn && (
             <>
               <ContextMenuItem onSelect={() => menuId != null && openDevelop(s.ids.indexOf(menuId))}>
-                Develop<ContextMenuShortcut>D</ContextMenuShortcut>
+                Edit<ContextMenuShortcut>{mac ? '⌘E' : 'Ctrl+E'}</ContextMenuShortcut>
               </ContextMenuItem>
               <ContextMenuItem onSelect={() => setExportIds(menuIds)}>
                 Export…<ContextMenuShortcut>{mac ? '⇧⌘E' : 'Ctrl+Shift+E'}</ContextMenuShortcut>
@@ -391,7 +393,7 @@ export function PhotoGrid() {
           )}
           <ContextMenuItem onSelect={() => void s.openEditor(menuIds)}>
             {menuIds.some((i) => s.cache.get(i)?.companion) ? 'Open RAW in Editor' : 'Open in Editor'}
-            <ContextMenuShortcut>{mac ? '⌘E' : 'Ctrl+E'}</ContextMenuShortcut>
+            <ContextMenuShortcut>{developOn ? (mac ? '⌥⌘E' : 'Ctrl+Alt+E') : mac ? '⌘E' : 'Ctrl+E'}</ContextMenuShortcut>
           </ContextMenuItem>
           <ContextMenuSub>
             <ContextMenuSubTrigger>Open With</ContextMenuSubTrigger>
