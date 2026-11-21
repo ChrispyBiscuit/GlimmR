@@ -31,6 +31,7 @@ import { MODEL, Tagger } from './tagging/tagger'
 import { tagsFor, VOCABULARY_VERSION } from './tagging/rules'
 import { appliedVocabulary, clearTags, embeddedIds, hideTag, pendingTagIds, retagFromEmbeddings, saveTagResults, setAppliedVocabulary, tagCounts } from './tagging/store'
 import { TITLE_BAR } from './titlebar'
+import { RenderService } from './develop/renderService'
 
 export class AppContext {
   library: Library
@@ -45,6 +46,8 @@ export class AppContext {
   ready: Promise<void> = Promise.resolve()
   /** Camera cards mounted now (kept by the card watcher). */
   cards: Volume[] = []
+  /** Renders developed photos on the GPU in a hidden window. */
+  readonly renderer = new RenderService()
   readonly tagger = new Tagger(path.join(app.getPath('userData'), 'Models'), (url, init) => net.fetch(url, init))
   private tagging: Promise<void> | null = null
   private tagAgain = false

@@ -12,6 +12,11 @@ import type { Api } from '../shared/api'
 import { TITLE_BAR } from './titlebar'
 import { watchCards } from './volumes'
 import { sourceFull, sourceImage } from './importer'
+import { developParity } from './develop/parity'
+
+// Developing photos needs WebGL2. Where the GPU is blocklisted, Chromium may only offer WebGL through its software
+// renderer (SwiftShader), which it now hides behind this switch; Glimmr only renders its own local content.
+app.commandLine.appendSwitch('enable-unsafe-swiftshader')
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'glimmr', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }])
 
@@ -136,6 +141,8 @@ ipcMain.handle('api', async (_e, method: keyof Api, args: unknown[]) => {
 })
 
 app.whenReady().then(() => {
+  // Test hooks (end-to-end tests only).
+  if (process.env.GLIMMR_TEST) (globalThis as Record<string, unknown>).__glimmrTest = { parity: (file: string, ext: string, settings: unknown) => developParity(ctx.renderer, file, ext, settings) }
   protocol.handle('glimmr', handleImage)
   if (process.platform === 'darwin') Menu.setApplicationMenu(Menu.buildFromTemplate([{ role: 'appMenu' }, { role: 'editMenu' }, { role: 'viewMenu' }, { role: 'windowMenu' }]))
   else Menu.setApplicationMenu(null)
