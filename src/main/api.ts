@@ -13,6 +13,7 @@ import { previewPage, runOutput } from './print/job'
 import { fontCss, listPrinters, pdfHtml, printHtml } from './print/printer'
 import { displayFile, photoFiles } from './files'
 import { trashSet } from './fileops'
+import { closeSource, finishImport, readSource, runImport } from './importer'
 import { absOf, rootPath, conflictsFor, createFolder, deleteFolder, folderStats, moveFolder, putInFolder, type FolderDeps } from './folders'
 import { removeCached } from './scanner'
 import { driverInfo, openWindowsPreferences } from './print/driver'
@@ -22,7 +23,7 @@ import { SORT_FIELDS } from './query'
 import { detectEditors, editorFor, launchEditor, mergeEditors } from './editors'
 import { createBackup, listBackups, mirroredRootPath, readBackup, restoreCatalogFile, verifyBackup } from './backup'
 import type { Api } from '../shared/api'
-import type { Editor, FileOpResult, Histogram, JobProgress } from '../shared/types'
+import type { Editor, FileOpResult, Histogram, ImportResult, JobProgress, Volume } from '../shared/types'
 import { Updater } from './updater'
 import { generatePreviews, previewPaths } from './previews'
 import { MODEL, Tagger } from './tagging/tagger'
@@ -41,6 +42,8 @@ export class AppContext {
   )
   /** Resolves when the catalog is usable; requests wait on it while a restore swaps the catalog file. */
   ready: Promise<void> = Promise.resolve()
+  /** Camera cards mounted now (kept by the card watcher). */
+  cards: Volume[] = []
   readonly tagger = new Tagger(path.join(app.getPath('userData'), 'Models'), (url, init) => net.fetch(url, init))
   private tagging: Promise<void> | null = null
   private tagAgain = false
@@ -556,6 +559,54 @@ export function createApi(ctx: AppContext): Api {
     revealFolder: (folder) => {
       const abs = absOf(lib().db, folder)
       if (fs.existsSync(abs)) void shell.openPath(abs)
+    },
+
+    cards: async () => ctx.cards,
+    openImportSource: async (p) => {
+      let source = p
+      if (!source) {
+        const r = await dialog.showOpenDialog(ctx.window!, { title: 'Import photos from a card or folder', properties: ['openDirectory'] })
+        if (r.canceled || !r.filePaths[0]) return null
+        source = r.filePaths[0]
+      }
+      const label = ctx.cards.find((c) => path.resolve(c.path) === path.resolve(source!))?.name ?? path.basename(source) ?? source
+      const s = await ctx.runJob('import', `Reading ${label}`, (report, signal) => readSource(lib().db, source!, label, ctx.cacheDir, report, signal))
+      return s ?? null
+    },
+    closeImportSource: (token) => closeSource(token),
+    runImport: async (token, opts, marks) => {
+      const empty: ImportResult & { error?: string } = { importId: 0, imported: 0, skipped: 0, failed: 0, videos: 0, errors: [], folders: [] }
+      let rootAbs: string
+      try {
+        rootAbs = rootPath(lib().db, opts.rootId)
+      } catch (e) {
+        return { ...empty, error: (e as Error).message }
+      }
+      let failure: string | undefined
+      const result = await ctx.runJob('import', 'Importing photos', async (report, signal) => {
+        try {
+          return await runImport({ db: lib().db, rootPath: rootAbs, report, signal }, token, opts)
+        } catch (e) {
+          failure = (e as Error).message
+          return undefined
+        }
+      })
+      if (!result) return { ...empty, error: failure ?? 'Cancelled.' }
+      // Catalog the new photos (pairs, previews, metadata), then tie them to this import and apply the card marks.
+      await ctx.scan(opts.rootId)
+      finishImport(lib().db, opts.rootId, rootAbs, result, marks)
+      lib().setSettings({ import: { ...lib().getSettings().import, rootId: opts.rootId, template: opts.template, copyVideos: opts.copyVideos, lastImportId: result.importId } })
+      ctx.emit('library-changed')
+      const { copied: _copied, ...summary } = result
+      return summary
+    },
+    lastImport: () => {
+      const id = lib().getSettings().import.lastImportId
+      if (!id) return null
+      const r = lib().db.prepare('SELECT id, label, finished_at FROM imports WHERE id = ?').get(id) as { id: number; label: string; finished_at: number } | undefined
+      if (!r) return null
+      const count = (lib().db.prepare('SELECT COUNT(*) AS c FROM photos WHERE import_id = ?').get(id) as { c: number }).c
+      return { id: r.id, label: r.label, finishedAt: r.finished_at, count }
     },
 
     printers: () => (ctx.window ? listPrinters(ctx.window.webContents) : Promise.resolve([])),

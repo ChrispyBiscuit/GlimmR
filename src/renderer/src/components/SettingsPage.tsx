@@ -60,7 +60,7 @@ function Setting({ label, description, htmlFor, children }: { label: string; des
 function LibrarySection() {
   const s = useStore()
   return (
-    <Page title="Library" intro="Glimmr catalogs photos where they already are. It never moves, renames or edits your files.">
+    <Page title="Library" intro="Glimmr catalogs photos where they already are. It only moves, renames or deletes files when you ask it to, and never edits them.">
       <ul className="divide-y rounded-md border bg-raised">
         {s.roots.length === 0 && <li className="p-4 text-[13px] text-ink-muted">No folders yet.</li>}
         {s.roots.map((r) => (
@@ -138,6 +138,18 @@ function LibrarySection() {
           >
             Save All to XMP
           </Button>
+        </Setting>
+        <Setting label="When a camera card is inserted" description="Glimmr only reads cards: it never deletes, changes or formats anything on them." htmlFor="on-card">
+          <Select value={s.settings?.import.onCard ?? 'ask'} onValueChange={(v) => s.settings && void s.setSettings({ import: { ...s.settings.import, onCard: v as 'off' | 'ask' | 'open' } })}>
+            <SelectTrigger id="on-card" size="sm" className="w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ask">Offer to import</SelectItem>
+              <SelectItem value="open">Open Import</SelectItem>
+              <SelectItem value="off">Do nothing</SelectItem>
+            </SelectContent>
+          </Select>
         </Setting>
       </div>
     </Page>

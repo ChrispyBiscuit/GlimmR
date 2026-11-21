@@ -127,6 +127,7 @@ export type Scope =
   | { type: 'keyword'; path: string }
   | { type: 'picks' }
   | { type: 'recent' }
+  | { type: 'import'; id: number }
 
 export interface SearchRequest {
   scope: Scope
@@ -219,6 +220,77 @@ export interface AppSettings {
   smartTags: { enabled: boolean }
   /** Last-used print settings and saved presets. */
   print: { last: Partial<PrintSettings>; presets: PrintPreset[] }
+  import: ImportSettings
+}
+
+export interface ImportSettings {
+  /** What happens when a camera card is inserted. */
+  onCard: 'off' | 'ask' | 'open'
+  /** Library folder imports go into (the first one when unset). */
+  rootId: number | null
+  /** Folder template, e.g. {YYYY}/{YYYY-MM-DD} {event}. */
+  template: string
+  copyVideos: boolean
+  /** The most recent import, for the Last import view. */
+  lastImportId: number | null
+}
+
+/** A mounted drive; `dcim` marks a camera card. */
+export interface Volume {
+  path: string
+  name: string
+  dcim: boolean
+}
+
+/** One photo on a card: a file, or a RAW + JPEG pair, with its sidecars. */
+export interface ImportItem {
+  /** The main file's path on the card. */
+  key: string
+  /** Position in the source's list (sorted by capture time), used for its thumbnail. */
+  index: number
+  name: string
+  companion: string | null
+  ext: string
+  raw: boolean
+  /** Bytes of every file of the photo. */
+  size: number
+  fileCount: number
+  takenAt: number | null
+  camera: string
+  /** Already in the library or copied by an earlier import. */
+  already: boolean
+}
+
+export interface ImportSource {
+  token: string
+  label: string
+  path: string
+  items: ImportItem[]
+  videos: number
+  videoBytes: number
+}
+
+export interface ImportOptions {
+  keys: string[]
+  rootId: number
+  template: string
+  event: string
+  copyVideos: boolean
+}
+
+/** Marks made while culling on the card, applied to the imported photos. */
+export type ImportMarks = Record<string, { flag?: Flag; rating?: number; label?: ColorLabel }>
+
+export interface ImportResult {
+  importId: number
+  imported: number
+  /** Already at the destination with the same content. */
+  skipped: number
+  failed: number
+  videos: number
+  errors: string[]
+  /** Folders (inside the library folder) that received photos. */
+  folders: string[]
 }
 
 export interface IccProfile {

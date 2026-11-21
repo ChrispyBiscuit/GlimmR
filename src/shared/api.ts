@@ -22,6 +22,11 @@ import type {
   ConflictChoice,
   FileOpResult,
   FolderRef,
+  ImportMarks,
+  ImportOptions,
+  ImportResult,
+  ImportSource,
+  Volume,
   IccProfile,
   PrinterInfo,
   DriverInfo,
@@ -128,6 +133,17 @@ export interface Api {
   /** Sends a folder and everything in it to the system trash. */
   deleteFolder(folder: FolderRef): Promise<FileOpResult>
   revealFolder(folder: FolderRef): void
+
+  // import (cards and folders are only read; Glimmr never changes or deletes anything on them)
+  /** Camera cards mounted now. */
+  cards(): Promise<Volume[]>
+  /** Reads a card or folder for import; asks with a dialog when no path is given. */
+  openImportSource(path?: string): Promise<ImportSource | null>
+  closeImportSource(token: string): void
+  /** Copies the chosen photos with verification, catalogs them and applies the card marks. */
+  runImport(token: string, opts: ImportOptions, marks: ImportMarks): Promise<ImportResult & { error?: string }>
+  /** The most recent import, for the sidebar. */
+  lastImport(): { id: number; label: string; finishedAt: number; count: number } | null
   /** Whether two library folders are on the same drive (moves between drives copy by default). */
   sameDrive(a: number, b: number): boolean
 
@@ -174,6 +190,8 @@ export interface Bridge {
   onJob(cb: (p: JobProgress) => void): () => void
   onLibraryChanged(cb: () => void): () => void
   onUpdate(cb: (s: UpdateStatus) => void): () => void
+  /** Camera cards mounted, whenever the set changes. */
+  onCards(cb: (cards: Volume[]) => void): () => void
   /** Absolute path of a file or folder dropped onto the window. */
   pathForFile(file: File): string
 }

@@ -14,6 +14,9 @@ import { Rediscover } from './Rediscover'
 import { Viewer } from './Viewer'
 import { SettingsPage } from './SettingsPage'
 import { PrintView } from './PrintView'
+import { LibraryCull } from './LibraryCull'
+import { ImportView } from './ImportView'
+import { ImportButton } from './ImportButton'
 
 const mac = navigator.userAgent.includes('Mac')
 
@@ -33,9 +36,9 @@ export function Shell() {
   }
 
   // Back and forward: mouse side buttons, Alt+arrows (Windows) and Cmd+[ / ] (macOS), as in browsers.
-  const { back, forward, viewer, printJob } = s
+  const { back, forward, viewer, printJob, cull, importSource } = s
   useEffect(() => {
-    if (viewer || printJob) return
+    if (viewer || printJob || cull || importSource) return
     const onMouse = (e: MouseEvent): void => {
       if (e.button === 3) back()
       if (e.button === 4) forward()
@@ -53,7 +56,7 @@ export function Shell() {
       window.removeEventListener('mouseup', onMouse)
       window.removeEventListener('keydown', onKey)
     }
-  }, [back, forward, viewer, printJob])
+  }, [back, forward, viewer, printJob, cull, importSource])
 
   const iconButton = (label: string, hint: string, icon: React.ReactNode, onClick: () => void, opts: { disabled?: boolean; pressed?: boolean } = {}) => (
     <Tooltip>
@@ -89,6 +92,7 @@ export function Shell() {
         <div className="flex min-w-0 items-center gap-2 pl-4">
           <SearchBar />
           <div className="ml-auto flex shrink-0 items-center gap-0.5">
+            <ImportButton />
             {iconButton('Add a photo folder', 'Add a photo folder', <FolderPlus />, () => void addFolder())}
             {iconButton('Settings', 'Settings', <Settings />, () => (s.view === 'settings' ? s.closeSettings() : s.openSettings()), { pressed: s.view === 'settings' })}
           </div>
@@ -124,6 +128,8 @@ export function Shell() {
       </main>
       {s.viewer && <Viewer />}
       {s.printJob && <PrintView />}
+      {s.cull && <LibraryCull />}
+      {s.importSource && <ImportView />}
     </div>
   )
 }

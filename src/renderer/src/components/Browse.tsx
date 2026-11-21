@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowDownWideNarrow, ArrowUpNarrowWide, Bookmark, Check } from 'lucide-react'
+import { ArrowDownWideNarrow, ArrowUpNarrowWide, Bookmark, Check, Flag } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -21,6 +21,16 @@ export function Browse() {
   const [sortFields, setSortFields] = useState<{ value: string; label: string }[]>([])
   const [customSort, setCustomSort] = useState('')
   useEffect(() => void api.sortFields().then(setSortFields), [])
+  // Ctrl/⌘ Shift C culls the photos shown.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (!(mac ? e.metaKey : e.ctrlKey) || !e.shiftKey || e.key.toLowerCase() !== 'c' || s.viewer || s.cull || s.printJob) return
+      e.preventDefault()
+      s.openCull(s.ids, Math.max(0, s.focusIndex), s.title)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
 
   const options = [
     ...(s.scope.type === 'album' ? [{ value: 'albumOrder', label: 'Album order' }] : []),
@@ -58,6 +68,15 @@ export function Browse() {
               Save Search
             </Button>
           )}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="sm" className="font-normal" disabled={!s.ids.length} onClick={() => s.openCull(s.ids, Math.max(0, s.focusIndex), s.title)}>
+                <Flag data-icon="inline-start" />
+                Cull
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Pick and reject these photos one by one ({mac ? '⌘⇧C' : 'Ctrl+Shift+C'})</TooltipContent>
+          </Tooltip>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="sm" className="font-normal">

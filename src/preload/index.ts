@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { Bridge } from '../shared/api'
-import type { JobProgress, UpdateStatus } from '../shared/types'
+import type { JobProgress, UpdateStatus, Volume } from '../shared/types'
 
 const bridge: Bridge = {
   call: (method, ...args) => ipcRenderer.invoke('api', method, args),
@@ -18,6 +18,11 @@ const bridge: Bridge = {
     const listener = (_: unknown, s: UpdateStatus): void => cb(s)
     ipcRenderer.on('update', listener)
     return () => ipcRenderer.removeListener('update', listener)
+  },
+  onCards: (cb) => {
+    const listener = (_: unknown, c: Volume[]): void => cb(c)
+    ipcRenderer.on('cards', listener)
+    return () => ipcRenderer.removeListener('cards', listener)
   },
   pathForFile: (file) => webUtils.getPathForFile(file)
 }

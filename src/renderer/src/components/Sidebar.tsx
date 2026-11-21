@@ -1,5 +1,5 @@
-import { useRef, useState, type ReactNode } from 'react'
-import { BookImage, ChevronRight, Clock, Flag, Folder, Images, Plus, Sparkles, Tag, WandSparkles, X } from 'lucide-react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { BookImage, ChevronRight, Clock, Flag, Folder, HardDriveDownload, Images, Plus, Sparkles, Tag, WandSparkles, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuShortcut, ContextMenuTrigger } from '@/components/ui/context-menu'
@@ -180,6 +180,8 @@ const mac = navigator.platform.toLowerCase().includes('mac')
 export function Sidebar({ onAddFolder }: { onAddFolder: () => void }) {
   const s = useStore()
   const [kwFilter, setKwFilter] = useState('')
+  const [lastImport, setLastImport] = useState<{ id: number; label: string; count: number } | null>(null)
+  useEffect(() => void api.lastImport().then(setLastImport), [s.libraryVersion, s.roots])
   const browsing = s.view === 'browse'
   const is = (scope: Scope): boolean => browsing && sameScope(s.scope, scope)
 
@@ -271,6 +273,15 @@ export function Sidebar({ onAddFolder }: { onAddFolder: () => void }) {
           <NavItem icon={<Images />} label="Photos" active={is({ type: 'all' })} onClick={() => s.navigate({ type: 'all' }, 'Photos')} />
           <NavItem icon={<Flag />} label="Picks" active={is({ type: 'picks' })} onClick={() => s.navigate({ type: 'picks' }, 'Picks')} />
           <NavItem icon={<Clock />} label="Recently added" active={is({ type: 'recent' })} onClick={() => s.navigate({ type: 'recent' }, 'Recently added')} />
+          {lastImport && lastImport.count > 0 && (
+            <NavItem
+              icon={<HardDriveDownload />}
+              label="Last import"
+              count={lastImport.count}
+              active={is({ type: 'import', id: lastImport.id })}
+              onClick={() => s.navigate({ type: 'import', id: lastImport.id }, `Imported from ${lastImport.label}`)}
+            />
+          )}
         </div>
 
         <Section

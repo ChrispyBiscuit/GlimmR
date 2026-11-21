@@ -372,6 +372,10 @@ export function buildWhere(db: Db, scope: Scope, query: string): Where {
     case 'recent':
       clauses.push('(p.added_at >= (SELECT MAX(added_at) FROM photos) - 30 * 86400000)')
       break
+    case 'import':
+      clauses.push('(p.import_id = ?)')
+      params.push(scope.id)
+      break
   }
 
   const positive: string[] = []

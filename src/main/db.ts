@@ -197,6 +197,8 @@ function migrate(db: Db): void {
   if (!has.has('quick_hash')) db.exec('ALTER TABLE photos ADD COLUMN quick_hash TEXT')
   if (!has.has('sha256')) db.exec('ALTER TABLE photos ADD COLUMN sha256 TEXT')
   if (!has.has('pixel_hash')) db.exec('ALTER TABLE photos ADD COLUMN pixel_hash TEXT')
+  // The import that brought the photo in (for the Last import view).
+  if (!has.has('import_id')) db.exec('ALTER TABLE photos ADD COLUMN import_id INTEGER')
   db.exec('CREATE INDEX IF NOT EXISTS photos_size_hash ON photos(size, quick_hash)')
   db.exec('CREATE INDEX IF NOT EXISTS photos_pixel_hash ON photos(pixel_hash)')
 }

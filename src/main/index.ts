@@ -10,6 +10,8 @@ import { displayFile } from './files'
 import { isEdited } from '../shared/edit'
 import type { Api } from '../shared/api'
 import { TITLE_BAR } from './titlebar'
+import { watchCards } from './volumes'
+import { sourceFull, sourceImage } from './importer'
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'glimmr', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }])
 
@@ -30,6 +32,17 @@ async function handleImage(request: Request): Promise<Response> {
   await ctx.ready
   const url = new URL(request.url)
   const kind = url.hostname
+  // A photo on a card being imported: glimmr://import/<session>/<index>?s=thumb|preview
+  if (kind === 'import') {
+    const [token, index] = url.pathname.slice(1).split('/')
+    try {
+      const size = url.searchParams.get('s')
+      const file = size === 'full' ? await sourceFull(token, Number(index)) : await sourceImage(token, Number(index), size === 'preview' ? 'preview' : 'thumb')
+      return file ? fetchFile(file) : new Response('not found', { status: 404 })
+    } catch {
+      return new Response('no preview', { status: 404 })
+    }
+  }
   const id = Number(url.pathname.slice(1))
   const [photo] = getPhotos(ctx.library.db, [id])
   if (!photo) return new Response('not found', { status: 404 })
@@ -133,6 +146,11 @@ app.whenReady().then(() => {
     void ctx.scan().then(() => Promise.all([ctx.backupIfDue(), ctx.startSmartTags()]))
   }, 1500)
   setInterval(() => void ctx.backupIfDue(), 60 * 60 * 1000)
+  // Camera cards: the renderer offers or opens Import when one appears.
+  watchCards((cards) => {
+    ctx.cards = cards
+    ctx.emit('cards', cards)
+  })
   ctx.updater.start()
 })
 

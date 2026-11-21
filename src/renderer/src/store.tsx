@@ -6,6 +6,7 @@ import type {
   Album,
   AppSettings,
   FolderNode,
+  ImportSource,
   JobProgress,
   KeywordNode,
   Photo,
@@ -14,7 +15,8 @@ import type {
   Scope,
   SmartAlbum,
   SortSpec,
-  UpdateStatus
+  UpdateStatus,
+  Volume
 } from '../../shared/types'
 
 export type View = 'rediscover' | 'browse' | 'settings'
@@ -42,6 +44,8 @@ export interface ViewerState {
 
 function useStoreValue() {
   const [settings, setSettingsState] = useState<AppSettings | null>(null)
+  const settingsRef = useRef<AppSettings | null>(null)
+  settingsRef.current = settings
   const [view, setView] = useState<View>('rediscover')
   const [scope, setScopeState] = useState<Scope>({ type: 'all' })
   const [title, setTitle] = useState('All photos')
@@ -61,6 +65,15 @@ function useStoreValue() {
   const [viewer, setViewer] = useState<ViewerState | null>(null)
   /** The print workspace, when open: the photos to print, or the calibration chart. */
   const [printJob, setPrintJob] = useState<{ ids: number[]; chart?: boolean } | null>(null)
+  const [cull, setCull] = useState<{ ids: number[]; start: number; title: string } | null>(null)
+  const [importSource, setImportSource] = useState<ImportSource | null>(null)
+  const [cards, setCards] = useState<Volume[]>([])
+  /** Reads a card or folder and opens the import window (asks for a folder when no path is given). */
+  const openImport = useCallback(async (path?: string): Promise<void> => {
+    const src = await api.openImportSource(path)
+    if (src) setImportSource(src)
+    else if (path) toast.error('That card couldn’t be read')
+  }, [])
   const [roots, setRoots] = useState<Root[]>([])
   const [albums, setAlbums] = useState<Album[]>([])
   const [smartAlbums, setSmartAlbums] = useState<SmartAlbum[]>([])
@@ -98,6 +111,20 @@ function useStoreValue() {
     void api.updateStatus().then(setUpdate)
     const offUpdate = bridge().onUpdate(setUpdate)
     void refreshSidebar()
+    // Camera cards: offer (or open) Import when one is inserted, as the import setting says.
+    let known = new Set<string>()
+    const offCards = bridge().onCards((list) => {
+      setCards(list)
+      const fresh = list.filter((c) => !known.has(c.path))
+      // Cards already in when Glimmr starts are offered too.
+      known = new Set(list.map((c) => c.path))
+      const mode = settingsRef.current?.import.onCard ?? 'ask'
+      for (const c of fresh) {
+        if (mode === 'open') void openImport(c.path)
+        else if (mode === 'ask')
+          toast(`${c.name} is connected`, { description: 'A camera card. Import its photos?', duration: 15000, action: { label: 'Import', onClick: () => void openImport(c.path) } })
+      }
+    })
     const offJob = bridge().onJob((p) => {
       setJobs((j) => {
         const next = { ...j, [p.id]: p }
@@ -108,8 +135,9 @@ function useStoreValue() {
         // Jobs can change settings in the main process (e.g. last backup time).
         void api.getSettings().then(setSettingsState)
         // The print workspace reports its own results.
-        if (p.kind === 'print' || p.kind === 'files' || p.kind === 'import') return
+        if (p.kind === 'print') return
         if (p.error) toast.error(p.label, { description: p.error, duration: 8000 })
+        else if (p.kind === 'files' || p.kind === 'import') return
         // Scans and tagging run often in the background; only mention the ones that changed something notable.
         else if (p.kind === 'tags' ? p.total >= 100 : p.kind !== 'scan' || (p.message && !p.message.startsWith('0 new, 0 updated')))
           toast.success(p.kind === 'tags' ? 'Smart tags are ready' : p.kind === 'model' ? 'Smart tag model downloaded' : p.label, {
@@ -128,6 +156,7 @@ function useStoreValue() {
       }, 400)
     })
     return () => {
+      offCards()
       offJob()
       offLib()
       offUpdate()
@@ -368,6 +397,16 @@ function useStoreValue() {
     },
     openPrintChart: () => setPrintJob({ ids: [], chart: true }),
     closePrint: () => setPrintJob(null),
+    cull,
+    openCull: (ids: number[], start: number, title: string): void => {
+      if (ids.length) setCull({ ids, start, title })
+    },
+    closeCull: () => setCull(null),
+    importSource,
+    setImportSource,
+    cards,
+    setCards,
+    openImport,
     roots,
     albums,
     smartAlbums,
