@@ -2,9 +2,11 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
-import { type Db, tx, keywordId, localDay, parseEdit, reindexFts } from './db'
+import * as exifr from 'exifr'
+import { type Db, tx, keywordId, localDay, mergePhotos, parseEdit, reindexFts } from './db'
 import { isSupported, RAW_EXTS, readMetadata, findSidecar, type ExtractedMeta } from './metadata'
 import { generatePreviews, imageSize, previewPaths } from './previews'
+import { DISPLAY_EXTS } from './files'
 
 const SKIP_DIRS = new Set(['$recycle.bin', 'system volume information', '@eadir', '.trashes', '.spotlight-v100', '.fseventsd', 'node_modules', '.glimmr'])
 
@@ -14,6 +16,49 @@ export interface FoundFile {
   ext: string
   size: number
   mtime: number
+  /** The camera JPEG/HEIF paired with this RAW (same folder, same name). */
+  companion?: FoundFile
+}
+
+const stemKey = (rel: string): string => rel.slice(0, rel.length - path.extname(rel).length).toLowerCase()
+const DISPLAY_ORDER = ['jpg', 'jpeg', 'jpe', 'heic', 'hif', 'heif']
+
+/**
+ * Pairs each RAW with the camera JPEG (or HEIF) of the same name in the same folder, as cameras write them. The RAW
+ * stays the main file and carries the JPEG as its companion; the JPEG is no longer a photo of its own. `keep(raw,
+ * jpeg)` can veto a pair (e.g. when the capture times disagree).
+ */
+export function pairFiles(files: FoundFile[], keep: (raw: FoundFile, display: FoundFile) => boolean = () => true): FoundFile[] {
+  const groups = new Map<string, FoundFile[]>()
+  for (const f of files) {
+    const k = stemKey(f.rel)
+    const g = groups.get(k)
+    if (g) g.push(f)
+    else groups.set(k, [f])
+  }
+  const out: FoundFile[] = []
+  for (const g of groups.values()) {
+    const raws = g.filter((f) => RAW_EXTS.has(f.ext)).sort((a, b) => a.rel.localeCompare(b.rel))
+    const displays = g.filter((f) => DISPLAY_EXTS.has(f.ext)).sort((a, b) => DISPLAY_ORDER.indexOf(a.ext) - DISPLAY_ORDER.indexOf(b.ext))
+    const raw = raws[0]
+    const display = raw && displays.find((d) => keep(raw, d))
+    if (raw && display) {
+      out.push({ ...raw, mtime: Math.max(raw.mtime, display.mtime), companion: display })
+      for (const f of g) if (f !== raw && f !== display) out.push(f)
+    } else out.push(...g)
+  }
+  return out
+}
+
+/** Capture time from EXIF, for checking a pair belongs together. */
+async function captureTime(file: string): Promise<number | null> {
+  try {
+    const r = (await exifr.parse(file, { pick: ['DateTimeOriginal', 'CreateDate'] })) as { DateTimeOriginal?: Date; CreateDate?: Date } | undefined
+    const d = r?.DateTimeOriginal ?? r?.CreateDate
+    return d instanceof Date && !isNaN(d.getTime()) ? d.getTime() : null
+  } catch {
+    return null
+  }
 }
 
 export async function walk(root: string, signal?: AbortSignal): Promise<FoundFile[]> {
@@ -54,6 +99,11 @@ export async function walk(root: string, signal?: AbortSignal): Promise<FoundFil
   return out
 }
 
+/** Deletes a removed photo's cached previews. */
+export function removeCached(cacheDir: string, id: number): void {
+  for (const f of Object.values(previewPaths(cacheDir, id))) fs.rmSync(f, { force: true })
+}
+
 function orientationOf(w: number | null, h: number | null): string | null {
   if (!w || !h) return null
   if (Math.abs(w - h) / Math.max(w, h) < 0.02) return 'square'
@@ -69,6 +119,18 @@ export function writePhotoRecord(
   importUserFields: boolean
 ): number {
   return tx(db, () => {
+    const id = writeRecord(db, rootId, f, meta, existingId, importUserFields)
+    db.prepare('UPDATE photos SET companion = ? WHERE id = ?').run(f.companion ? path.basename(f.companion.rel) : null, id)
+    if (f.companion) {
+      db.prepare('INSERT INTO metadata (photo_id, key, value, num) VALUES (?, ?, ?, ?)').run(id, 'PairedFile', path.basename(f.companion.rel), null)
+      reindexFts(db, id)
+    }
+    return id
+  })
+}
+
+function writeRecord(db: Db, rootId: number, f: FoundFile, meta: ExtractedMeta, existingId: number | null, importUserFields: boolean): number {
+  {
     const folder = f.rel.includes('/') ? f.rel.slice(0, f.rel.lastIndexOf('/')) : ''
     const filename = f.rel.slice(f.rel.lastIndexOf('/') + 1)
     const takenAt = meta.takenAt ?? f.mtime
@@ -148,7 +210,7 @@ export function writePhotoRecord(
     for (const e of meta.entries) ins.run(id, e.key, e.value, e.num)
     reindexFts(db, id)
     return id
-  })
+  }
 }
 
 export interface ScanOptions {
@@ -180,15 +242,28 @@ async function mapLimit<T>(items: T[], limit: number, fn: (item: T, index: numbe
 
 export async function scanRoot(db: Db, rootId: number, rootPath: string, opts: ScanOptions): Promise<ScanResult> {
   opts.onProgress?.(0, 0, 'Looking for photos…')
-  const files = await walk(rootPath, opts.signal)
+  const found = await walk(rootPath, opts.signal)
+  const existing = new Map<string, { id: number; size: number; mtime: number; has_preview: number; companion: string | null }>()
+  for (const r of db.prepare('SELECT id, rel_path, size, mtime, has_preview, companion FROM photos WHERE root_id = ?').all(rootId) as any[]) existing.set(r.rel_path, r)
+  // A RAW and a camera JPEG of the same name become one photo, unless both carry capture times more than 2 s apart.
+  // Pairs already in the catalog aren't checked again.
+  const times = new Map<string, number | null>()
+  for (const g of pairFiles(found)) {
+    if (!g.companion || existing.get(g.rel)?.companion === path.basename(g.companion.rel)) continue
+    times.set(g.abs, await captureTime(g.abs))
+    times.set(g.companion.abs, await captureTime(g.companion.abs))
+  }
+  const files = pairFiles(found, (raw, jpg) => {
+    const a = times.get(raw.abs)
+    const b = times.get(jpg.abs)
+    return a == null || b == null || Math.abs(a - b) <= 2000
+  })
   const result: ScanResult = { found: files.length, added: 0, updated: 0, offline: 0, errors: 0 }
   if (!fs.existsSync(rootPath)) {
     // Drive not connected: keep everything, mark it offline.
     result.offline = Number(db.prepare('UPDATE photos SET offline = 1 WHERE root_id = ?').run(rootId).changes)
     return result
   }
-  const existing = new Map<string, { id: number; size: number; mtime: number; has_preview: number }>()
-  for (const r of db.prepare('SELECT id, rel_path, size, mtime, has_preview FROM photos WHERE root_id = ?').all(rootId) as any[]) existing.set(r.rel_path, r)
 
   const seen = new Set<number>()
   let done = 0
@@ -199,7 +274,8 @@ export async function scanRoot(db: Db, rootId: number, rootPath: string, opts: S
     async (f) => {
       const prior = existing.get(f.rel)
       try {
-        const changed = !prior || prior.size !== f.size || prior.mtime !== f.mtime || opts.reimport
+        const companion = f.companion ? path.basename(f.companion.rel) : null
+        const changed = !prior || prior.size !== f.size || prior.mtime !== f.mtime || (prior.companion ?? null) !== companion || opts.reimport
         let id = prior?.id ?? null
         let orientation = 1
         if (changed) {
@@ -215,6 +291,14 @@ export async function scanRoot(db: Db, rootId: number, rootPath: string, opts: S
           id = writePhotoRecord(db, rootId, f, meta, id, !!opts.reimport)
           if (prior) result.updated++
           else result.added++
+          // The camera JPEG was a photo of its own before it was paired: fold its ratings, keywords, albums and edit
+          // into the pair, and drop its record.
+          const was = f.companion && existing.get(f.companion.rel)
+          if (was && was.id !== id) {
+            mergePhotos(db, id!, was.id)
+            removeCached(opts.cacheDir, was.id)
+            seen.add(was.id)
+          }
         } else if (prior.has_preview) {
           db.prepare('UPDATE photos SET offline = 0 WHERE id = ? AND offline = 1').run(prior.id)
         }
@@ -226,7 +310,9 @@ export async function scanRoot(db: Db, rootId: number, rootPath: string, opts: S
           }
           try {
             const { edit } = db.prepare('SELECT edit FROM photos WHERE id = ?').get(id!) as { edit: string | null }
-            const size = await generatePreviews(f.abs, f.ext, orientation, previewPaths(opts.cacheDir, id!), parseEdit(edit))
+            // A pair is shown by its camera JPEG.
+            const shown = f.companion ?? f
+            const size = await generatePreviews(shown.abs, shown.ext, orientation, previewPaths(opts.cacheDir, id!), parseEdit(edit))
             // Formats whose metadata has no pixel size (Photoshop, BMP) get it from the decode. So do raw files whose
             // metadata only gave a thumbnail's size (some NEFs): the embedded preview is at least that big.
             if (size)
@@ -248,7 +334,7 @@ export async function scanRoot(db: Db, rootId: number, rootPath: string, opts: S
     opts.signal
   )
   if (!opts.signal?.aborted) {
-    const missing = [...existing.values()].filter((e) => !seen.has(e.id)).map((e) => e.id)
+    const missing = [...existing.values()].filter((e) => !seen.has(e.id) && db.prepare('SELECT 1 FROM photos WHERE id = ?').get(e.id)).map((e) => e.id)
     const mark = db.prepare('UPDATE photos SET offline = 1 WHERE id = ?')
     tx(db, () => missing.forEach((id) => mark.run(id)))
     result.offline = missing.length

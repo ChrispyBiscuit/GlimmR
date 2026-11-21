@@ -8,7 +8,7 @@ import { decodeDirect } from '../src/main/decode/decoders'
 import { heifIcc } from '../src/main/decode/heif'
 import { userCommentText } from '../src/main/metadata'
 import { FORMATS, RAW_EXTS, SUPPORTED_EXTS, findFormat, formatIdSql, formatLabel } from '../src/shared/formats'
-import { openDb } from '../src/main/db'
+import { openDb, SCHEMA_VERSION } from '../src/main/db'
 import { Library } from '../src/main/library'
 import { scanRoot } from '../src/main/scanner'
 import { largestEmbeddedJpeg, previewPaths } from '../src/main/previews'
@@ -373,7 +373,7 @@ describe('importing every format', () => {
     const redo = (db.prepare('SELECT filename FROM photos WHERE has_preview = 0').all() as { filename: string }[]).map((r) => r.filename).sort((a, b) => a.localeCompare(b))
     // HEICs, and raw files known only by a small size (the test raws carry an 800×533 preview and no EXIF size).
     expect(redo).toEqual(['camera.HIF', 'IMG_1.CR3', 'L100.raw', 'P100.RW2', 'phone.heic'])
-    expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(3)
+    expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(SCHEMA_VERSION)
     db.close()
   })
 

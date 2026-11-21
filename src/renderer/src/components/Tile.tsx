@@ -63,7 +63,7 @@ export const Tile = memo(function Tile({ photo, width, height, selected, focused
         </span>
       )}
       {(photo.kind === 'raw' || photo.offline) && (
-        <span className="absolute top-1.5 right-1.5 rounded-sm bg-black/55 px-1 py-px text-[10px] font-medium text-white">{photo.offline ? 'Offline' : 'RAW'}</span>
+        <span className="absolute top-1.5 right-1.5 rounded-sm bg-black/55 px-1 py-px text-[10px] font-medium text-white">{photo.offline ? 'Offline' : photo.companion ? 'RAW+JPEG' : 'RAW'}</span>
       )}
       <span className="pointer-events-none absolute inset-x-0 top-0 truncate bg-gradient-to-b from-black/60 to-transparent px-2 pt-1.5 pb-4 text-left text-[11px] text-white opacity-0 transition-opacity group-hover:opacity-100">
         {photo.title || photo.filename}

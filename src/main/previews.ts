@@ -27,6 +27,8 @@ export interface PreviewPaths {
   view: string
   /** Full-resolution render of the edit, made on demand for 100% zoom (only for edited photos). */
   full: string
+  /** A RAW + JPEG pair's RAW preview, made on demand to compare with the camera JPEG. */
+  raw: string
 }
 
 export function previewPaths(cacheDir: string, id: number): PreviewPaths {
@@ -35,7 +37,8 @@ export function previewPaths(cacheDir: string, id: number): PreviewPaths {
     thumb: path.join(cacheDir, 'thumbs', bucket, `${id}.jpg`),
     preview: path.join(cacheDir, 'previews', bucket, `${id}.jpg`),
     view: path.join(cacheDir, 'edited', bucket, `${id}.jpg`),
-    full: path.join(cacheDir, 'edited', bucket, `${id}-full.jpg`)
+    full: path.join(cacheDir, 'edited', bucket, `${id}-full.jpg`),
+    raw: path.join(cacheDir, 'previews', bucket, `${id}-raw.jpg`)
   }
 }
 
@@ -249,6 +252,14 @@ export function generatePreviews(file: string, ext: string, exifOrientation: num
   })().finally(() => inflight.delete(out.thumb))
   inflight.set(out.thumb, job)
   return job
+}
+
+/** A plain upright preview of a file (no edit), e.g. a pair's RAW. */
+export async function renderPreviewOf(file: string, ext: string, exifOrientation: number, out: string): Promise<void> {
+  const { input, orientation } = await sourceFor(file, ext, exifOrientation)
+  await fs.promises.mkdir(path.dirname(out), { recursive: true })
+  await pipeline(input, orientation).resize(PREVIEW_SIZE, PREVIEW_SIZE, { fit: 'inside', withoutEnlargement: true }).flatten({ background: '#111' }).jpeg({ quality: 85 }).toFile(`${out}.tmp`)
+  await fs.promises.rename(`${out}.tmp`, out)
 }
 
 /** Renders an edited original at full resolution, for viewing at 100%. Only for formats the viewer shows directly. */

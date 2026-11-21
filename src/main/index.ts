@@ -5,7 +5,8 @@ import { pathToFileURL } from 'node:url'
 import { AppContext, createApi } from './api'
 import { getPhotos } from './db'
 import { BROWSER_EXTS } from './metadata'
-import { generatePreviews, previewPaths, renderFullEdit } from './previews'
+import { generatePreviews, previewPaths, renderFullEdit, renderPreviewOf } from './previews'
+import { displayFile } from './files'
 import { isEdited } from '../shared/edit'
 import type { Api } from '../shared/api'
 import { TITLE_BAR } from './titlebar'
@@ -34,11 +35,25 @@ async function handleImage(request: Request): Promise<Response> {
   if (!photo) return new Response('not found', { status: 404 })
   const paths = previewPaths(ctx.cacheDir, id)
   const edited = isEdited(photo.edit)
-  if (kind === 'original' && BROWSER_EXTS.has(photo.ext) && !photo.offline) {
-    if (!edited) return fetchFile(photo.path)
+  // A RAW + JPEG pair is shown by its camera JPEG; `raw` shows the RAW's own preview, for comparison.
+  const shown = displayFile(photo)
+  if (kind === 'raw') {
+    if (!photo.companion) return handleImage(new Request(request.url.replace('//raw/', '//preview/')))
+    if (!fs.existsSync(paths.raw)) {
+      try {
+        const o = ctx.library.db.prepare('SELECT exif_orientation FROM photos WHERE id = ?').get(id) as { exif_orientation: number }
+        await renderPreviewOf(photo.path, photo.ext, o.exif_orientation, paths.raw)
+      } catch {
+        return new Response('no preview', { status: 404 })
+      }
+    }
+    return fetchFile(paths.raw)
+  }
+  if (kind === 'original' && BROWSER_EXTS.has(shown.ext) && !photo.offline) {
+    if (!edited) return fetchFile(shown.path)
     if (!fs.existsSync(paths.full)) {
       try {
-        await renderFullEdit(photo.path, photo.edit!, paths.full)
+        await renderFullEdit(shown.path, photo.edit!, paths.full)
       } catch {
         return new Response('render failed', { status: 500 })
       }
@@ -50,7 +65,7 @@ async function handleImage(request: Request): Promise<Response> {
     if (photo.offline) return new Response('offline', { status: 404 })
     try {
       const o = ctx.library.db.prepare('SELECT exif_orientation FROM photos WHERE id = ?').get(id) as { exif_orientation: number }
-      await generatePreviews(photo.path, photo.ext, o.exif_orientation, paths, photo.edit)
+      await generatePreviews(shown.path, shown.ext, o.exif_orientation, paths, photo.edit)
       ctx.library.db.prepare('UPDATE photos SET has_preview = 1 WHERE id = ?').run(id)
     } catch {
       return new Response('no preview', { status: 404 })

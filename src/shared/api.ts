@@ -110,7 +110,7 @@ export interface Api {
   histogram(id: number): Promise<Histogram | null>
 
   /** Moves photos (and sidecars only they use) to the system trash and removes them from the catalog. */
-  trashPhotos(ids: number[]): Promise<{ trashed: number; failed: number; error?: string }>
+  trashPhotos(ids: number[], part?: 'all' | 'raw' | 'jpeg'): Promise<{ trashed: number; failed: number; error?: string }>
 
   // printing
   printers(): Promise<PrinterInfo[]>

@@ -3,7 +3,7 @@ import path from 'node:path'
 import type { Photo } from '../shared/types'
 import { sanitizeEdit } from '../shared/edit'
 
-export const SCHEMA_VERSION = 3
+export const SCHEMA_VERSION = 4
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS roots (
@@ -120,6 +120,36 @@ CREATE TABLE IF NOT EXISTS photo_embeddings (
   vec BLOB NOT NULL
 );
 
+-- Imports from cards and folders: one row per import, one per source file, so an interrupted import resumes
+-- without copying twice, and a card's photos already in the library are recognised by content.
+CREATE TABLE IF NOT EXISTS imports (
+  id INTEGER PRIMARY KEY,
+  source TEXT NOT NULL,
+  label TEXT NOT NULL,
+  destination TEXT NOT NULL,
+  started_at INTEGER NOT NULL,
+  finished_at INTEGER,
+  state TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS import_files (
+  import_id INTEGER NOT NULL REFERENCES imports(id) ON DELETE CASCADE,
+  source_rel TEXT NOT NULL,
+  size INTEGER NOT NULL,
+  quick_hash TEXT NOT NULL,
+  sha256 TEXT,
+  dest_path TEXT,
+  state TEXT NOT NULL,
+  error TEXT,
+  PRIMARY KEY (import_id, source_rel)
+);
+CREATE INDEX IF NOT EXISTS import_files_hash ON import_files(size, quick_hash);
+-- Photo pairs the user said aren't duplicates (lower id first).
+CREATE TABLE IF NOT EXISTS not_duplicates (
+  a INTEGER NOT NULL REFERENCES photos(id) ON DELETE CASCADE,
+  b INTEGER NOT NULL REFERENCES photos(id) ON DELETE CASCADE,
+  PRIMARY KEY (a, b)
+);
+
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
@@ -156,6 +186,13 @@ function migrate(db: Db): void {
   const has = new Set((db.prepare('PRAGMA table_info(photos)').all() as { name: string }[]).map((c) => c.name))
   if (!has.has('edit')) db.exec('ALTER TABLE photos ADD COLUMN edit TEXT')
   if (!has.has('edited_at')) db.exec('ALTER TABLE photos ADD COLUMN edited_at INTEGER NOT NULL DEFAULT 0')
+  // Catalog version 4: RAW + JPEG pairs (the camera JPEG's file name, in the RAW's folder) and duplicate fingerprints.
+  if (!has.has('companion')) db.exec('ALTER TABLE photos ADD COLUMN companion TEXT')
+  if (!has.has('quick_hash')) db.exec('ALTER TABLE photos ADD COLUMN quick_hash TEXT')
+  if (!has.has('sha256')) db.exec('ALTER TABLE photos ADD COLUMN sha256 TEXT')
+  if (!has.has('pixel_hash')) db.exec('ALTER TABLE photos ADD COLUMN pixel_hash TEXT')
+  db.exec('CREATE INDEX IF NOT EXISTS photos_size_hash ON photos(size, quick_hash)')
+  db.exec('CREATE INDEX IF NOT EXISTS photos_pixel_hash ON photos(pixel_hash)')
 }
 
 /** Local calendar day for an epoch-ms time, as YYYY-MM-DD. */
@@ -181,7 +218,7 @@ export function tx<T>(db: Db, fn: () => T): T {
 export const PHOTO_COLUMNS = `p.id, p.root_id, p.rel_path, p.filename, p.ext, p.kind, p.size, p.mtime, p.added_at,
   p.taken_at, p.width, p.height, p.orientation, p.make, p.model, p.lens, p.focal, p.aperture, p.shutter, p.iso,
   p.lat, p.lon, p.rating, p.flag, p.label, p.title, p.caption, p.creator, p.offline, p.has_preview, p.edit, p.edited_at,
-  r.path AS root_path`
+  p.companion, r.path AS root_path`
 
 export function rowToPhoto(r: Record<string, any>): Photo {
   return {
@@ -189,6 +226,7 @@ export function rowToPhoto(r: Record<string, any>): Photo {
     rootId: r.root_id,
     relPath: r.rel_path,
     path: path.join(r.root_path, ...String(r.rel_path).split('/')),
+    companion: r.companion ? path.join(r.root_path, ...String(r.rel_path).split('/').slice(0, -1), r.companion) : null,
     filename: r.filename,
     ext: r.ext,
     kind: r.kind,
@@ -289,4 +327,31 @@ export function reindexFts(db: Db, photoId: number): void {
   const meta = db.prepare('SELECT value FROM metadata WHERE photo_id = ? AND num IS NULL').all(photoId) as { value: string }[]
   for (const m of meta) if (m.value.length <= 200) parts.push(m.value)
   db.prepare('INSERT INTO photos_fts (rowid, body) VALUES (?, ?)').run(photoId, parts.join(' \n '))
+}
+
+const FLAG_RANK: Record<string, number> = { pick: 2, reject: 1 }
+
+/**
+ * Folds one photo record into another: the kept photo gets the highest rating, a pick if either had one, and the
+ * label, title, caption, creator and edit it lacks, plus the other's keywords and albums. The other record is then
+ * removed from the catalog (its files are not touched).
+ */
+export function mergePhotos(db: Db, keepId: number, dropId: number): void {
+  if (keepId === dropId) return
+  tx(db, () => {
+    const get = db.prepare('SELECT rating, flag, label, title, caption, creator, edit, edited_at FROM photos WHERE id = ?')
+    const keep = get.get(keepId) as Record<string, any> | undefined
+    const drop = get.get(dropId) as Record<string, any> | undefined
+    if (!keep || !drop) return
+    const flag = (FLAG_RANK[drop.flag] ?? 0) > (FLAG_RANK[keep.flag] ?? 0) ? drop.flag : keep.flag
+    db.prepare(
+      `UPDATE photos SET rating = ?, flag = ?, label = COALESCE(label, ?), title = COALESCE(title, ?), caption = COALESCE(caption, ?),
+       creator = COALESCE(creator, ?), edit = COALESCE(edit, ?), edited_at = CASE WHEN edit IS NULL THEN ? ELSE edited_at END WHERE id = ?`
+    ).run(Math.max(keep.rating, drop.rating), flag, drop.label, drop.title, drop.caption, drop.creator, drop.edit, drop.edited_at, keepId)
+    db.prepare('INSERT OR IGNORE INTO photo_keywords (photo_id, keyword_id) SELECT ?, keyword_id FROM photo_keywords WHERE photo_id = ?').run(keepId, dropId)
+    db.prepare('INSERT OR IGNORE INTO album_photos (album_id, photo_id, added_at) SELECT album_id, ?, added_at FROM album_photos WHERE photo_id = ?').run(keepId, dropId)
+    db.prepare('DELETE FROM photos WHERE id = ?').run(dropId)
+    db.prepare('DELETE FROM photos_fts WHERE rowid = ?').run(dropId)
+    reindexFts(db, keepId)
+  })
 }

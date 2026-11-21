@@ -3,6 +3,7 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
+import { allFiles, photoFiles } from './files'
 import crypto from 'node:crypto'
 import { DatabaseSync } from 'node:sqlite'
 import type { Db } from './db'
@@ -108,7 +109,7 @@ async function mirrorOriginals(
   roots: { id: number; path: string; name: string }[],
   opts: BackupOptions
 ): Promise<{ fileCount: number; bytes: number }> {
-  const rows = db.prepare('SELECT root_id, rel_path FROM photos WHERE offline = 0').all() as { root_id: number; rel_path: string }[]
+  const rows = db.prepare('SELECT root_id, rel_path, companion FROM photos WHERE offline = 0').all() as { root_id: number; rel_path: string; companion: string | null }[]
   const byId = new Map(roots.map((r) => [r.id, r]))
   const mirrorDir = originalsDir(destination)
   let done = 0
@@ -119,10 +120,9 @@ async function mirrorOriginals(
     const root = byId.get(row.root_id)!
     const src = path.join(root.path, ...row.rel_path.split('/'))
     const dst = path.join(mirrorDir, mirrorName(root), ...row.rel_path.split('/'))
-    const base = src.slice(0, src.length - path.extname(src).length)
-    const pairs: [string, string][] = [[src, dst]]
-    for (const side of [`${base}.xmp`, `${src}.xmp`])
-      if (fs.existsSync(side)) pairs.push([side, path.join(path.dirname(dst), path.basename(side))])
+    // The photo's camera JPEG and sidecars go along with it.
+    const set = photoFiles({ path: src, companion: row.companion ? path.join(path.dirname(src), row.companion) : null })
+    const pairs: [string, string][] = allFiles(set).map((f) => [f, path.join(path.dirname(dst), path.relative(path.dirname(src), f))])
     for (const [from, to] of pairs) {
       const st = await fs.promises.stat(from)
       const existing = await fs.promises.stat(to).catch(() => null)

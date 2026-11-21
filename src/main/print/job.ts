@@ -10,6 +10,7 @@ import { editedSize } from '../../shared/edit'
 import { captionText, computeLayout, parsePageRange, withDefaults, type Layout, type Placement, type PrintPhoto, type PrintSettings } from '../../shared/print'
 import type { Photo } from '../../shared/types'
 import { renderCell, type PrintSource, type RawImage } from './render'
+import { displayFile } from '../files'
 import { softProof, toProfile, profileInfo } from './color'
 import { composePage, encodeWithProfile, overlaySvg, pagesHtml } from './compose'
 import { CHART, renderChart } from './chart'
@@ -52,7 +53,9 @@ export async function prepare(db: Db, req: PrintRequest, chartDir: string): Prom
     for (const p of getPhotos(db, req.photoIds)) {
       photos.set(p.id, p)
       const o = (orient.get(p.id) as { exif_orientation: number } | undefined)?.exif_orientation ?? 1
-      sources.set(p.id, { id: p.id, path: p.path, ext: p.ext, exifOrientation: o, edit: p.edit, offline: p.offline })
+      // A RAW + JPEG pair prints from its full-size camera JPEG.
+      const shown = displayFile(p)
+      sources.set(p.id, { id: p.id, path: shown.path, ext: shown.ext, exifOrientation: o, edit: p.edit, offline: p.offline })
       const size = p.width && p.height ? editedSize(p.width, p.height, p.edit) : { w: 3000, h: 2000 }
       list.push({ id: p.id, w: size.w, h: size.h })
     }

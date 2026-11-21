@@ -3,7 +3,7 @@
 import { app, dialog, net, screen, shell, type BrowserWindow } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
-import { getPhotos, openDb } from './db'
+import { getPhotos, openDb, reindexFts } from './db'
 import sharp from 'sharp'
 import { rotateEdit } from '../shared/edit'
 import wasmPath from './print/vendor/lcms.wasm?asset'
@@ -11,11 +11,13 @@ import { setWasmSource } from './print/color'
 import { addProfile, listProfiles } from './print/profiles'
 import { previewPage, runOutput } from './print/job'
 import { fontCss, listPrinters, pdfHtml, printHtml } from './print/printer'
+import { displayFile, photoFiles } from './files'
+import { trashSet } from './fileops'
+import { removeCached } from './scanner'
 import { driverInfo, openWindowsPreferences } from './print/driver'
 import { Library } from './library'
 import { scanRoot } from './scanner'
 import { SORT_FIELDS } from './query'
-import { findSidecar } from './metadata'
 import { detectEditors, editorFor, launchEditor, mergeEditors } from './editors'
 import { createBackup, listBackups, mirroredRootPath, readBackup, restoreCatalogFile, verifyBackup } from './backup'
 import type { Api } from '../shared/api'
@@ -288,7 +290,8 @@ export function createApi(ctx: AppContext): Api {
     // What's in the frame may have changed, so the photo is tagged again from its new thumbnail.
     lib().db.prepare('DELETE FROM photo_embeddings WHERE photo_id = ?').run(id)
     const { exif_orientation } = lib().db.prepare('SELECT exif_orientation FROM photos WHERE id = ?').get(id) as { exif_orientation: number }
-    await generatePreviews(p.path, p.ext, exif_orientation, previewPaths(ctx.cacheDir, id), p.edit)
+    const shown = displayFile(p)
+    await generatePreviews(shown.path, shown.ext, exif_orientation, previewPaths(ctx.cacheDir, id), p.edit)
   }
   const pickFolder = async (title: string): Promise<string | null> => {
     const r = await dialog.showOpenDialog(ctx.window!, { title, properties: ['openDirectory', 'createDirectory'] })
@@ -471,27 +474,38 @@ export function createApi(ctx: AppContext): Api {
       }
     },
 
-    trashPhotos: async (ids) => {
+    trashPhotos: async (ids, part = 'all') => {
       const photos = lib().photos(ids)
       const removed: number[] = []
       let error: string | undefined
+      let trashed = 0
+      const cache = new Map<string, string[]>()
+      const db = lib().db
       for (const p of photos) {
         try {
-          if (fs.existsSync(p.path)) await shell.trashItem(p.path)
-          // A sidecar named IMG_1.xmp can belong to IMG_1.CR2 and IMG_1.JPG alike; keep it while another file uses it.
-          const sidecar = findSidecar(p.path)
-          const base = path.basename(p.path, path.extname(p.path))
-          const shared = sidecar && path.basename(sidecar).toLowerCase() === `${base}.xmp`.toLowerCase() &&
-            fs.readdirSync(path.dirname(p.path)).some((f) => f.startsWith(`${base}.`) && !/\.xmp$/i.test(f) && f !== path.basename(p.path))
-          if (sidecar && !shared) await shell.trashItem(sidecar)
-          removed.push(p.id)
+          // Only one half of a RAW + JPEG pair: the photo stays, as the other file.
+          const half = p.companion && part !== 'all' ? part : 'all'
+          await trashSet(photoFiles(p, cache), half, (f) => shell.trashItem(f))
+          if (half === 'jpeg') {
+            db.prepare('UPDATE photos SET companion = NULL WHERE id = ?').run(p.id)
+            await rerender(p.id)
+          } else if (half === 'raw') {
+            const name = path.basename(p.companion!)
+            const ext = path.extname(name).slice(1).toLowerCase()
+            const rel = p.relPath.includes('/') ? `${p.relPath.slice(0, p.relPath.lastIndexOf('/'))}/${name}` : name
+            db.prepare("UPDATE photos SET rel_path = ?, filename = ?, ext = ?, kind = 'image', companion = NULL WHERE id = ?").run(rel, name, ext, p.id)
+            reindexFts(db, p.id)
+          } else removed.push(p.id)
+          trashed++
         } catch (e) {
           error ??= (e as Error).message
         }
+        cache.clear()
       }
       lib().removePhotos(removed)
+      for (const id of removed) removeCached(ctx.cacheDir, id)
       ctx.emit('library-changed')
-      return { trashed: removed.length, failed: photos.length - removed.length, error }
+      return { trashed, failed: photos.length - trashed, error }
     },
 
     printers: () => (ctx.window ? listPrinters(ctx.window.webContents) : Promise.resolve([])),

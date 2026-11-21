@@ -88,6 +88,9 @@ export function Viewer() {
   const [idle, setIdle] = useState(false)
   const [metaFilter, setMetaFilter] = useState('')
   const [cropping, setCropping] = useState(false)
+  // A RAW + JPEG pair shows its camera JPEG; this switches to the RAW's own preview to compare.
+  const [showRaw, setShowRaw] = useState(false)
+  useEffect(() => setShowRaw(false), [photo?.id])
   const [saving, setSaving] = useState(false)
   const stage = useRef<HTMLDivElement>(null)
   const strip = useRef<HTMLDivElement>(null)
@@ -290,7 +293,7 @@ export function Viewer() {
     setDims((d) => (d && d.id === photo.id && Math.abs(d.w - nw * k) < 2 && Math.abs(d.h - nh * k) < 2 ? d : { id: photo.id, w: nw * k, h: nh * k }))
   }
 
-  const src = photo ? (hiRes ? originalUrl(photo.id, photo.rev) : previewUrl(photo.id, photo.rev)) : undefined
+  const src = photo ? (showRaw && photo.companion ? `glimmr://raw/${photo.id}?v=${photo.rev}` : hiRes ? originalUrl(photo.id, photo.rev) : previewUrl(photo.id, photo.rev)) : undefined
   const editors = s.settings?.editors.editors ?? []
   const defaultEditor = editors.find((e) => e.id === s.settings?.editors.defaultEditor)
   const searchFor = (q: string): void => {
@@ -403,6 +406,16 @@ export function Viewer() {
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
+              {photo.companion && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" aria-pressed={showRaw} onClick={() => setShowRaw(!showRaw)}>
+                      {showRaw ? 'RAW' : 'JPEG'}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>{showRaw ? 'Showing the RAW’s preview. Show the camera JPEG' : 'Showing the camera JPEG. Show the RAW’s preview'}</TooltipContent>
+                </Tooltip>
+              )}
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button variant="ghost" size="icon-sm" aria-label="Crop and rotate" aria-pressed={cropping} disabled={photo.offline} onClick={() => (cropping ? setCropping(false) : startCrop())}>
@@ -693,7 +706,8 @@ export function Viewer() {
             )}
             <Group title="File">
               <dl>
-                <Row k="Name" v={detail.filename} />
+                <Row k="Name" v={detail.companion ? `${detail.filename} (main file)` : detail.filename} />
+                {detail.companion && <Row k="Shown" v={`${detail.companion.split(/[\\/]/).pop()} (camera JPEG)`} />}
                 <Row k="Size" v={<span className="tnum">{fmtBytes(detail.size)}</span>} />
                 {detail.width && detail.height && (
                   <Row

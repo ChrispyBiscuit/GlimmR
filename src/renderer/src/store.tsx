@@ -297,17 +297,25 @@ function useStoreValue() {
 
   /** Asks, then moves photos to the system trash. Resolves true when any were removed. */
   const trashPhotos = useCallback(
-    async (targetIds: number[]): Promise<boolean> => {
+    async (targetIds: number[], part: 'all' | 'raw' | 'jpeg' = 'all'): Promise<boolean> => {
       const n = targetIds.length
       if (!n) return false
+      const pairs = targetIds.filter((id) => cache.current.get(id)?.companion).length
+      const what = part === 'raw' ? 'RAW file' : part === 'jpeg' ? 'JPEG' : null
       const ok = await confirmDialog({
-        title: n === 1 ? `Move this photo to the ${BIN}?` : `Move ${n.toLocaleString()} photos to the ${BIN}?`,
-        description: `${n === 1 ? `The file is moved to the ${BIN}, with its XMP sidecar if it has one,` : `The files are moved to the ${BIN}, with any XMP sidecars,`} and removed from Glimmr. You can restore ${n === 1 ? 'it' : 'them'} from the ${BIN}.`,
+        title: what
+          ? `Move the ${what}${n === 1 ? '' : 's'} of ${n === 1 ? 'this photo' : `${n.toLocaleString()} photos`} to the ${BIN}?`
+          : n === 1
+            ? `Move this photo to the ${BIN}?`
+            : `Move ${n.toLocaleString()} photos to the ${BIN}?`,
+        description: what
+          ? `Only the ${what}${n === 1 ? '' : 's'} and ${n === 1 ? 'its' : 'their'} own sidecars are moved. The photo${n === 1 ? ' stays' : 's stay'} in Glimmr as the other file.`
+          : `${pairs ? `${pairs === n ? (n === 1 ? 'Both the RAW and the JPEG are' : 'Both RAW and JPEG files are') : `RAW + JPEG pairs go together. Everything is`} moved` : n === 1 ? 'The file is moved' : 'The files are moved'} to the ${BIN} with ${n === 1 && !pairs ? 'its' : 'their'} sidecars (XMP and the like), and removed from Glimmr. You can restore ${n === 1 ? 'it' : 'them'} from the ${BIN}.`,
         confirmLabel: `Move to ${BIN}`,
         destructive: true
       })
       if (!ok) return false
-      const r = await api.trashPhotos(targetIds)
+      const r = await api.trashPhotos(targetIds, part)
       if (r.failed) toast.error(`${r.failed === 1 ? 'A photo' : `${r.failed} photos`} couldn’t be moved to the ${BIN}`, { description: r.error })
       else toast(`Moved ${r.trashed === 1 ? '1 photo' : `${r.trashed.toLocaleString()} photos`} to the ${BIN}`)
       setSelected(new Set())

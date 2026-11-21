@@ -313,7 +313,7 @@ export function PhotoGrid() {
         <ContextMenuContent className="w-60">
           <ContextMenuItem onSelect={() => menuId != null && openViewer(s.ids.indexOf(menuId))}>View</ContextMenuItem>
           <ContextMenuItem onSelect={() => void s.openEditor(menuIds)}>
-            Open in Editor
+            {menuIds.some((i) => s.cache.get(i)?.companion) ? 'Open RAW in Editor' : 'Open in Editor'}
             <ContextMenuShortcut>{mac ? '⌘E' : 'Ctrl+E'}</ContextMenuShortcut>
           </ContextMenuItem>
           <ContextMenuSub>
@@ -328,7 +328,7 @@ export function PhotoGrid() {
               <ContextMenuItem onSelect={() => menuId != null && void api.openWithDefault(menuId)}>System Default App</ContextMenuItem>
             </ContextMenuSubContent>
           </ContextMenuSub>
-          <ContextMenuItem onSelect={() => menuId != null && void api.reveal(menuId)}>{mac ? 'Show in Finder' : 'Show in Explorer'}</ContextMenuItem>
+          <ContextMenuItem onSelect={() => menuId != null && void api.reveal(menuId)}>{menuId != null && s.cache.get(menuId)?.companion ? (mac ? 'Show RAW in Finder' : 'Show RAW in Explorer') : mac ? 'Show in Finder' : 'Show in Explorer'}</ContextMenuItem>
           <ContextMenuSeparator />
           <ContextMenuSub>
             <ContextMenuSubTrigger disabled={!s.albums.length}>Add to Album</ContextMenuSubTrigger>
@@ -374,6 +374,19 @@ export function PhotoGrid() {
           <ContextMenuItem variant="destructive" onSelect={() => void s.trashPhotos(menuIds)}>
             Move to {mac ? 'Trash' : 'Recycle Bin'}…<ContextMenuShortcut>{mac ? '⌫' : 'Del'}</ContextMenuShortcut>
           </ContextMenuItem>
+          {menuIds.some((i) => s.cache.get(i)?.companion) && (
+            <ContextMenuSub>
+              <ContextMenuSubTrigger>Move One File of the Pair</ContextMenuSubTrigger>
+              <ContextMenuSubContent>
+                <ContextMenuItem variant="destructive" onSelect={() => void s.trashPhotos(menuIds.filter((i) => s.cache.get(i)?.companion), 'jpeg')}>
+                  JPEG Only…
+                </ContextMenuItem>
+                <ContextMenuItem variant="destructive" onSelect={() => void s.trashPhotos(menuIds.filter((i) => s.cache.get(i)?.companion), 'raw')}>
+                  RAW Only…
+                </ContextMenuItem>
+              </ContextMenuSubContent>
+            </ContextMenuSub>
+          )}
         </ContextMenuContent>
       </ContextMenu>
 

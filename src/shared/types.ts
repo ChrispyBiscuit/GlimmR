@@ -12,7 +12,10 @@ export interface Photo {
   id: number
   rootId: number
   relPath: string
+  /** The main file: the RAW of a RAW + JPEG pair. */
   path: string
+  /** The camera JPEG (or HEIF) paired with a RAW, in the same folder: what's displayed. Null for single files. */
+  companion: string | null
   filename: string
   ext: string
   kind: 'raw' | 'image'
