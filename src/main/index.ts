@@ -20,7 +20,7 @@ import { proxyBytes } from './develop/source'
 // renderer (SwiftShader), which it now hides behind this switch; Glimmr only renders its own local content.
 app.commandLine.appendSwitch('enable-unsafe-swiftshader')
 
-protocol.registerSchemesAsPrivileged([{ scheme: 'glimmr', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }])
+protocol.registerSchemesAsPrivileged([{ scheme: 'glimmr', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }])
 
 // A separate data folder (portable installs, testing).
 // The data folder is pinned to "Glimmr" so a change of product name never moves the library.
@@ -53,14 +53,16 @@ async function handleImage(request: Request): Promise<Response> {
   const id = Number(url.pathname.slice(1))
   // The editing copy for the Develop view: header + 16-bit pixels.
   if (kind === 'develop') {
+    // Fetched (not shown in an img), so it needs CORS: the app page's origin differs from glimmr:.
+    const cors = { 'access-control-allow-origin': '*', 'cache-control': 'no-store' }
     const [p] = getPhotos(ctx.library.db, [id])
-    if (!p || p.offline) return new Response('not found', { status: 404 })
+    if (!p || p.offline) return new Response('This photo’s file isn’t available.', { status: 404, headers: cors })
     try {
       const o = ctx.library.db.prepare('SELECT exif_orientation FROM photos WHERE id = ?').get(id) as { exif_orientation: number }
       const bytes = await proxyBytes(ctx.cacheDir, id, p, o.exif_orientation)
-      return new Response(new Uint8Array(bytes), { headers: { 'content-type': 'application/octet-stream', 'cache-control': 'no-store' } })
+      return new Response(new Uint8Array(bytes), { headers: { ...cors, 'content-type': 'application/octet-stream' } })
     } catch (e) {
-      return new Response((e as Error).message, { status: 500 })
+      return new Response((e as Error).message, { status: 500, headers: cors })
     }
   }
   const [photo] = getPhotos(ctx.library.db, [id])

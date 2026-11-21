@@ -114,6 +114,11 @@ export function prepare(s: DevelopSettings, src: SourceInfo, scale = 1, out: Out
     // Other files: white balance is a relative shift, adapting from a white that's warmer/cooler and greener/pinker.
     let temp = s.wb.temp
     let tint = s.wb.tint
+    // Kelvin settings from a raw file whose raw data couldn't be read (developed from its preview instead): as shot.
+    if (Math.abs(temp) > 200) {
+      temp = 0
+      tint = 0
+    }
     if (s.wb.mode === 'auto' && src.autoMul) {
       const t = relativeFromMul(src.autoMul)
       temp = t.temp
@@ -173,7 +178,7 @@ export function prepare(s: DevelopSettings, src: SourceInfo, scale = 1, out: Out
 const normalizeG = (m: Vec3): Vec3 => [m[0] / m[1], 1, m[2] / m[1]]
 
 /** Relative temperature/tint (±100) that neutralises grey-world multipliers on a non-raw image. */
-function relativeFromMul(mul: Vec3): { temp: number; tint: number } {
+export function relativeFromMul(mul: Vec3): { temp: number; tint: number } {
   // Search the relative controls for the adaptation that maps the image's average to grey.
   let best = { temp: 0, tint: 0 }
   let bestErr = Infinity

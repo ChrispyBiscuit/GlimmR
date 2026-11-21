@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
+import { toast } from 'sonner'
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuShortcut, ContextMenuSub, ContextMenuSubContent, ContextMenuSubTrigger, ContextMenuTrigger } from '@/components/ui/context-menu'
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
 import { cn } from '@/lib/utils'
@@ -10,6 +11,8 @@ import { buildLayout, GAP, type LayoutRow } from '../layout'
 import { fmtNum, monthLabel } from '../format'
 import { Tile } from './Tile'
 import { DND_PHOTOS, movePhotosTo } from '../folderOps'
+import { ExportDialog } from './develop/ExportDialog'
+import type { StyleInfo } from '../../../shared/types'
 
 const mac = navigator.userAgent.includes('Mac')
 const PAD = 20
@@ -21,6 +24,9 @@ export function PhotoGrid() {
   const [width, setWidth] = useState(0)
   const anchor = useRef(-1)
   const [menuId, setMenuId] = useState<number | null>(null)
+  const [exportIds, setExportIds] = useState<number[] | null>(null)
+  const [styles, setStyles] = useState<StyleInfo[]>([])
+  const labs = !!s.settings?.labs.develop
   const target = s.thumbSize
   const groupByMonth = ['default', 'taken'].includes(s.sort.field) && s.scope.type !== 'smart'
 
@@ -109,6 +115,21 @@ export function PhotoGrid() {
 
   const scrollToPhoto = useCallback((i: number) => virtual.scrollToIndex(rowOf[i], { align: 'auto' }), [virtual, rowOf])
   const openViewer = useCallback((index: number) => s.setViewer({ ids: s.ids, index, slideshow: false }), [s])
+  /** Develops a photo: the filmstrip holds the selection when several are selected, else nearby results. */
+  const openDevelop = (index: number): void => {
+    const id = s.ids[index]
+    if (id == null) return
+    if (s.selected.size > 1 && s.selected.has(id)) {
+      const ids = s.targets
+      return s.openDevelop(ids, ids.indexOf(id))
+    }
+    const from = Math.max(0, index - 250)
+    s.openDevelop(s.ids.slice(from, index + 250), index - from)
+  }
+  const pasteDevelop = (ids: number[]): void => {
+    if (!s.developClip || !ids.length) return
+    void api.developApply(ids, s.developClip, 'Paste settings').then((n) => toast(`Pasted settings onto ${n === 1 ? '1 photo' : `${n.toLocaleString()} photos`}`))
+  }
 
   /** Turns photos a quarter, then refreshes their tiles (the grid re-flows from the new shapes). */
   const rotate = async (ids: number[], dir: 1 | -1): Promise<void> => {
@@ -213,6 +234,15 @@ export function PhotoGrid() {
         e.preventDefault()
         return s.openPrint(s.targets)
       }
+      if (labs && !mod && e.key.toLowerCase() === 'd' && f >= 0) return openDevelop(f)
+      if (labs && mod && e.shiftKey && e.key.toLowerCase() === 'v' && s.targets.length) {
+        e.preventDefault()
+        return pasteDevelop(s.targets)
+      }
+      if (labs && mod && e.shiftKey && e.key.toLowerCase() === 'e' && s.targets.length) {
+        e.preventDefault()
+        return setExportIds(s.targets)
+      }
       if (e.key.toLowerCase() === 's' && !mod) return s.setViewer({ ids: s.ids, index: Math.max(0, f), slideshow: true })
       const u = cullingUpdate(e, s.cache.get(s.ids[f])?.label)
       if (u && s.targets.length) {
@@ -286,6 +316,7 @@ export function PhotoGrid() {
               const id = Number((e.target as HTMLElement).closest<HTMLElement>('[data-id]')?.dataset.id)
               if (!id) return e.preventDefault()
               setMenuId(id)
+              if (labs) void api.styles().then(setStyles)
               if (!s.selected.has(id)) {
                 s.setSelected(new Set([id]))
                 s.setFocusIndex(s.ids.indexOf(id))
@@ -331,6 +362,33 @@ export function PhotoGrid() {
         </ContextMenuTrigger>
         <ContextMenuContent className="w-60">
           <ContextMenuItem onSelect={() => menuId != null && openViewer(s.ids.indexOf(menuId))}>View</ContextMenuItem>
+          {labs && (
+            <>
+              <ContextMenuItem onSelect={() => menuId != null && openDevelop(s.ids.indexOf(menuId))}>
+                Develop<ContextMenuShortcut>D</ContextMenuShortcut>
+              </ContextMenuItem>
+              <ContextMenuItem onSelect={() => setExportIds(menuIds)}>
+                Export…<ContextMenuShortcut>{mac ? '⇧⌘E' : 'Ctrl+Shift+E'}</ContextMenuShortcut>
+              </ContextMenuItem>
+              <ContextMenuSub>
+                <ContextMenuSubTrigger disabled={!styles.length}>Apply Style</ContextMenuSubTrigger>
+                <ContextMenuSubContent className="max-h-80 overflow-y-auto">
+                  {styles.map((st) => (
+                    <ContextMenuItem key={st.id} onSelect={() => void api.applyStyle(menuIds, st.id, 1).then((n) => toast(`Applied ${st.name} to ${n === 1 ? '1 photo' : `${n.toLocaleString()} photos`}`))}>
+                      {st.name}
+                    </ContextMenuItem>
+                  ))}
+                </ContextMenuSubContent>
+              </ContextMenuSub>
+              {s.developClip && (
+                <ContextMenuItem onSelect={() => pasteDevelop(menuIds)}>
+                  Paste Develop Settings<ContextMenuShortcut>{mac ? '⇧⌘V' : 'Ctrl+Shift+V'}</ContextMenuShortcut>
+                </ContextMenuItem>
+              )}
+              {menuIds.some((i) => s.cache.get(i)?.developed) && <ContextMenuItem onSelect={() => void api.developReset(menuIds)}>Reset Develop Settings</ContextMenuItem>}
+              <ContextMenuSeparator />
+            </>
+          )}
           <ContextMenuItem onSelect={() => void s.openEditor(menuIds)}>
             {menuIds.some((i) => s.cache.get(i)?.companion) ? 'Open RAW in Editor' : 'Open in Editor'}
             <ContextMenuShortcut>{mac ? '⌘E' : 'Ctrl+E'}</ContextMenuShortcut>
@@ -410,6 +468,7 @@ export function PhotoGrid() {
           )}
         </ContextMenuContent>
       </ContextMenu>
+      {exportIds && <ExportDialog ids={exportIds} onClose={() => setExportIds(null)} />}
 
       {years.length > 1 && (
         <nav aria-label="Jump to year" className="flex w-12 shrink-0 flex-col justify-between border-l py-4 text-center">

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, Crop, Flag, FolderOpen, Info, Pause, Pencil, Play, Printer, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, Crop, Flag, FolderOpen, Info, Pause, Pencil, Play, Printer, SlidersHorizontal, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
@@ -209,7 +209,7 @@ export function Viewer() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       // The crop tool handles its own keys.
-      if (cropping || s.printJob || isTyping(e) || document.querySelector('[role="menu"], [data-slot="dialog-content"]')) return
+      if (cropping || s.printJob || s.develop || isTyping(e) || document.querySelector('[role="menu"], [data-slot="dialog-content"]')) return
       // The zoom slider uses the arrow keys itself.
       if ((e.target as HTMLElement)?.closest?.('[role="slider"]') && /^(Arrow|Home|End|Page)/.test(e.key)) return
       const mod = e.metaKey || e.ctrlKey
@@ -241,6 +241,7 @@ export function Viewer() {
         e.preventDefault()
         return void s.openEditor([id])
       }
+      if (!mod && e.key.toLowerCase() === 'd' && s.settings?.labs.develop && photo && !photo.offline) return openDevelop()
       if (mod && e.key.toLowerCase() === 'p') {
         e.preventDefault()
         return s.openPrint([id])
@@ -255,6 +256,12 @@ export function Viewer() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   })
+
+  /** Develop this photo, with the viewer's photos in the filmstrip. */
+  const openDevelop = (): void => {
+    s.openDevelop(v.ids, v.index)
+    s.setViewer(null)
+  }
 
   const startCrop = (): void => {
     setView(null)
@@ -383,6 +390,17 @@ export function Viewer() {
                   </button>
                 ))}
               </div>
+              {s.settings?.labs.develop && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button size="sm" variant="secondary" disabled={photo.offline} onClick={openDevelop}>
+                      <SlidersHorizontal data-icon="inline-start" />
+                      Develop
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Edit in Glimmr (D)</TooltipContent>
+                </Tooltip>
+              )}
               <div className="flex">
                 <Button size="sm" className="rounded-r-none" onClick={() => void s.openEditor([id])}>
                   <Pencil data-icon="inline-start" />

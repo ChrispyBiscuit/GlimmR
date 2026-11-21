@@ -6,6 +6,7 @@
 | Platforms | Windows and macOS (Linux where it comes free) |
 | Research | [DEVELOP_RESEARCH.md](DEVELOP_RESEARCH.md) |
 | Branch | `claude/develop-module`, kept separate until it proves itself (see §3) |
+| Status | Phase 1 built on the branch, behind Settings → Labs → Develop. See §15 |
 
 ## 1. Goal
 
@@ -198,3 +199,43 @@ each is judged before the next starts.
    and Glimmr's backups only for phase 1.
 3. **darktable-cli as an interim raw engine:** worth offering as an option for users who have darktable installed?
    Proposed: no. It splits the pipeline (PL-5).
+
+## 15. Phase 1 status
+
+Built on `claude/develop-module`, off by default (Settings → Labs → Develop). Nothing is released from the branch.
+
+**Done**
+
+- Pipeline: LibRaw (WebAssembly) decodes raw files to linear camera RGB, with a 2560 px editing copy cached per
+  photo. The same WebGL2 shaders drive the Develop view, previews and thumbnails, export and print, from a hidden
+  render window. A CPU reference in `src/shared/develop/pipeline.ts` checks them: GPU and CPU agree within 1/255.
+- Adjustments: white balance (as shot, auto, presets, kelvin and tint, picker), exposure, contrast, highlights,
+  shadows, whites, blacks, a parametric and point tone curve per channel, vibrance, saturation, HSL in 8 bands with
+  a drag-on-the-photo tool, black and white mix, sharpening (amount, radius, detail, masking), luminance and colour
+  noise reduction.
+- Looks: .cube (1D, 3D, shaper + 3D) and .3dl LUTs with tetrahedral interpolation, sRGB, Rec.709 and camera log
+  inputs, and an amount. LUT folders import as packs. Glimmr styles save any groups of settings, include their LUT,
+  export and import as `.glimmrstyle` files, and preview live on the photo when you point at them. There are six
+  built-in styles, including "Camera-like" (the default look is neutral).
+- Workflow:
+  - The Develop view (`D` from the grid or viewer, or the context menu), with a filmstrip, histogram, clipping
+    overlay (`J`), before/after (`\`) and split (`Y`), zoom, undo/redo, history and reset.
+  - Copy and paste settings by group (`Ctrl/⌘ Shift C/V`, paste also works on a selection in the grid).
+  - Apply a style to many photos from the grid.
+  - An "Edited" badge, and the `is:developed` and `style:` searches.
+  - Export to JPEG, PNG or TIFF (8/16-bit), sRGB or Display P3, with size, screen sharpening and metadata options.
+  - Prints use the developed image.
+- Catalog: additive tables and columns only (BR-4). History keeps 100 steps per photo, and repeats of one change
+  merge into a single step.
+
+**Known limits**
+
+- Zoom shows the editing copy: the full image is used for export and print, not on screen. On a 12 MP camera the
+  zoom is about 60% of the original's full size.
+- Colour isn't tuned per camera yet: no ColorChecker data. LibRaw's matrices give a fair but flatter rendering than
+  camera JPEGs. The "Camera-like" style is the stopgap.
+- Under software WebGL (no usable GPU), a slider step takes about 0.6 s. The view renders at screen size, which
+  helps, but it stays slow.
+- The phase 1.5 compatibility imports (Lightroom profiles and presets, Capture One styles) aren't built.
+  Lightroom's and Capture One's exported .cube LUTs work now.
+

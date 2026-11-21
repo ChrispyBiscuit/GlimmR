@@ -18,6 +18,7 @@ import { LibraryCull } from './LibraryCull'
 import { ImportView } from './ImportView'
 import { ImportButton } from './ImportButton'
 import { DuplicatesView } from './DuplicatesView'
+import { DevelopView } from './develop/DevelopView'
 
 const mac = navigator.userAgent.includes('Mac')
 
@@ -37,9 +38,9 @@ export function Shell() {
   }
 
   // Back and forward: mouse side buttons, Alt+arrows (Windows) and Cmd+[ / ] (macOS), as in browsers.
-  const { back, forward, viewer, printJob, cull, importSource } = s
+  const { back, forward, viewer, printJob, cull, importSource, develop } = s
   useEffect(() => {
-    if (viewer || printJob || cull || importSource) return
+    if (viewer || printJob || cull || importSource || develop) return
     const onMouse = (e: MouseEvent): void => {
       if (e.button === 3) back()
       if (e.button === 4) forward()
@@ -57,7 +58,7 @@ export function Shell() {
       window.removeEventListener('mouseup', onMouse)
       window.removeEventListener('keydown', onKey)
     }
-  }, [back, forward, viewer, printJob, cull, importSource])
+  }, [back, forward, viewer, printJob, cull, importSource, develop])
 
   const iconButton = (label: string, hint: string, icon: React.ReactNode, onClick: () => void, opts: { disabled?: boolean; pressed?: boolean } = {}) => (
     <Tooltip>
@@ -133,6 +134,7 @@ export function Shell() {
       {s.printJob && <PrintView />}
       {s.cull && <LibraryCull />}
       {s.importSource && <ImportView />}
+      {s.develop && <DevelopView />}
     </div>
   )
 }

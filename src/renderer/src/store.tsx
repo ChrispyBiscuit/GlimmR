@@ -18,6 +18,7 @@ import type {
   UpdateStatus,
   Volume
 } from '../../shared/types'
+import type { PartialSettings } from '../../shared/develop/settings'
 
 export type View = 'rediscover' | 'browse' | 'settings' | 'duplicates'
 
@@ -66,6 +67,10 @@ function useStoreValue() {
   /** The print workspace, when open: the photos to print, or the calibration chart. */
   const [printJob, setPrintJob] = useState<{ ids: number[]; chart?: boolean } | null>(null)
   const [cull, setCull] = useState<{ ids: number[]; start: number; title: string } | null>(null)
+  /** The Develop view, when open: the photos in its filmstrip and the one being edited. */
+  const [develop, setDevelop] = useState<{ ids: number[]; index: number } | null>(null)
+  /** Copied develop settings, for paste (Ctrl/⌘+Shift+V). */
+  const [developClip, setDevelopClip] = useState<PartialSettings | null>(null)
   const [importSource, setImportSource] = useState<ImportSource | null>(null)
   const [cards, setCards] = useState<Volume[]>([])
   /** Reads a card or folder and opens the import window (asks for a folder when no path is given). */
@@ -402,6 +407,14 @@ function useStoreValue() {
       if (ids.length) setCull({ ids, start, title })
     },
     closeCull: () => setCull(null),
+    develop,
+    setDevelop,
+    openDevelop: (ids: number[], index = 0): void => {
+      if (ids.length) setDevelop({ ids, index: Math.min(Math.max(0, index), ids.length - 1) })
+    },
+    closeDevelop: () => setDevelop(null),
+    developClip,
+    setDevelopClip,
     importSource,
     setImportSource,
     cards,

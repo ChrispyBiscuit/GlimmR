@@ -27,6 +27,7 @@ const SECTIONS = [
   { key: 'smart-tags', label: 'Smart tags' },
   { key: 'printing', label: 'Printing' },
   { key: 'appearance', label: 'Appearance' },
+  { key: 'labs', label: 'Labs' },
   { key: 'updates', label: 'Updates' },
   { key: 'help', label: 'Search help' }
 ]
@@ -529,6 +530,24 @@ function AppearanceSection() {
   )
 }
 
+function LabsSection() {
+  const s = useStore()
+  const st = s.settings!
+  return (
+    <Page title="Labs" intro="Features still being built. They may change, and you can turn them off at any time.">
+      <div>
+        <Setting
+          label="Develop"
+          description="Edit photos in Glimmr: white balance, exposure and tone, curves, colour, sharpening and noise, styles and LUTs (.cube and .3dl), and export. Raw files develop from their raw data. Edits are kept in the catalog and never change your files. Turning this off hides the tools; edits already made stay on the photos."
+          htmlFor="labs-develop"
+        >
+          <Switch id="labs-develop" checked={st.labs.develop} onCheckedChange={(v) => s.setSettings({ labs: { ...st.labs, develop: v } })} />
+        </Setting>
+      </div>
+    </Page>
+  )
+}
+
 function UpdatesSection() {
   const s = useStore()
   const u = s.update
@@ -877,7 +896,7 @@ function HelpSection() {
 export function SettingsPage() {
   const s = useStore()
   if (!s.settings) return null
-  const Section = { library: LibrarySection, editors: EditorsSection, backup: BackupSection, 'smart-tags': SmartTagsSection, printing: PrintingSection, appearance: AppearanceSection, updates: UpdatesSection, help: HelpSection }[s.settingsSection] ?? LibrarySection
+  const Section = { library: LibrarySection, editors: EditorsSection, backup: BackupSection, 'smart-tags': SmartTagsSection, printing: PrintingSection, appearance: AppearanceSection, labs: LabsSection, updates: UpdatesSection, help: HelpSection }[s.settingsSection] ?? LibrarySection
   return (
     <div className="flex h-full flex-col">
       <div className="flex min-h-0 flex-1">

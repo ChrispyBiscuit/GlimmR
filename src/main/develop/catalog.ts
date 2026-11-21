@@ -11,6 +11,8 @@ import { applyPartial, changedGroups, defaultSettings, sanitize, type DevelopSet
 import type { LutInfo, StyleInfo } from '../../shared/types'
 
 const HISTORY_MAX = 100
+/** Repeats of the same change within this long make one history step. */
+const MERGE_MS = 3000
 
 /** The kind of develop source a photo has (raw for raw files and pairs; LibRaw failures are handled at render). */
 export function kindOf(db: Db, id: number): SourceKind {
@@ -34,9 +36,15 @@ export function setDevelop(db: Db, id: number, settings: DevelopSettings | null,
   const isDefault = !s || (!changedGroups(s, kind).length && !s.styles.length)
   tx(db, () => {
     db.prepare('UPDATE photos SET develop = ?, develop_at = ? WHERE id = ?').run(isDefault ? null : JSON.stringify(s), Date.now() % 1e9, id)
-    const last = db.prepare('SELECT MAX(seq) AS m FROM develop_history WHERE photo_id = ?').get(id) as { m: number | null }
-    const seq = (last.m ?? 0) + 1
-    db.prepare('INSERT INTO develop_history (photo_id, seq, label, settings, at) VALUES (?, ?, ?, ?, ?)').run(id, seq, label, JSON.stringify(s ?? defaultSettings(kind)), Date.now())
+    const last = db.prepare('SELECT seq, label, at FROM develop_history WHERE photo_id = ? ORDER BY seq DESC LIMIT 1').get(id) as { seq: number; label: string; at: number } | undefined
+    const json = JSON.stringify(s ?? defaultSettings(kind))
+    // Nudging one control again and again (arrow keys, several drags) is one step.
+    if (last && last.label === label && Date.now() - last.at < MERGE_MS) {
+      db.prepare('UPDATE develop_history SET settings = ?, at = ? WHERE photo_id = ? AND seq = ?').run(json, Date.now(), id, last.seq)
+      return
+    }
+    const seq = (last?.seq ?? 0) + 1
+    db.prepare('INSERT INTO develop_history (photo_id, seq, label, settings, at) VALUES (?, ?, ?, ?, ?)').run(id, seq, label, json, Date.now())
     db.prepare('DELETE FROM develop_history WHERE photo_id = ? AND seq <= ?').run(id, seq - HISTORY_MAX)
   })
 }

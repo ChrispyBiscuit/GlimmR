@@ -156,9 +156,17 @@ export async function exportPhotos(deps: OutputDeps, ids: number[], o: ExportOpt
       let img: Sharp
       if (settings) {
         const src = await editingCopy(deps, p)
-        // The editing copy is enough for exports no bigger than it; anything bigger is rendered at full size.
-        const want = targetSize(src.fullWidth, Math.round((src.fullWidth * src.height) / src.width), o.size)
-        const fromProxy = !sixteen && want && Math.max(want.w, want.h) <= Math.max(src.width, src.height)
+        // The editing copy is enough when the export is no sharper than it (cropping keeps the scale); anything else
+        // is rendered from the full-size image.
+        const fw = src.fullWidth
+        const fh = Math.round((fw * src.height) / src.width)
+        const turned = isEdited(p.edit) && p.edit!.rotate % 180 !== 0
+        const crop = (isEdited(p.edit) && p.edit!.crop) || { w: 1, h: 1 }
+        const cw = (turned ? fh : fw) * crop.w
+        const ch = (turned ? fw : fh) * crop.h
+        const want = targetSize(cw, ch, o.size)
+        const wantScale = want ? (want.w ? want.w / cw : want.h / ch) : 1
+        const fromProxy = !sixteen && want && wantScale <= src.width / fw
         const full = fromProxy ? undefined : await decodeSource(p, 0, orientationOf(deps.db, p.id))
         img = toSharp(await renderWith(deps, src, settings, { full, float: sixteen, output: o.space }))
       } else {
@@ -169,7 +177,7 @@ export async function exportPhotos(deps: OutputDeps, ids: number[], o: ExportOpt
       }
       if (isEdited(p.edit)) img = await applyEdit(img, p.edit!)
       // Raw pixels from the last stage, so the size includes any crop.
-      const buf = await img.raw().toBuffer({ resolveWithObject: true })
+      const buf = await img.raw(sixteen ? { depth: 'ushort' } : undefined).toBuffer({ resolveWithObject: true })
       let out = sharp(buf.data, { raw: { width: buf.info.width, height: buf.info.height, channels: buf.info.channels as 3 }, limitInputPixels: false })
       if (sixteen) out = sharp(new Uint16Array(buf.data.buffer, buf.data.byteOffset, buf.data.byteLength / 2), { raw: { width: buf.info.width, height: buf.info.height, channels: buf.info.channels as 3 }, limitInputPixels: false }).toColourspace('rgb16')
       const want = targetSize(buf.info.width, buf.info.height, o.size)

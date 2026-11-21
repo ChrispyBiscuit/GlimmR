@@ -24,7 +24,7 @@ export function Browse() {
   // Ctrl/⌘ Shift C culls the photos shown.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (!(mac ? e.metaKey : e.ctrlKey) || !e.shiftKey || e.key.toLowerCase() !== 'c' || s.viewer || s.cull || s.printJob) return
+      if (!(mac ? e.metaKey : e.ctrlKey) || !e.shiftKey || e.key.toLowerCase() !== 'c' || s.viewer || s.cull || s.printJob || s.develop) return
       e.preventDefault()
       s.openCull(s.ids, Math.max(0, s.focusIndex), s.title)
     }

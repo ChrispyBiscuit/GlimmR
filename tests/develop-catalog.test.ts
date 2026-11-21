@@ -25,6 +25,21 @@ beforeAll(async () => {
 }, 30000)
 
 describe('develop catalog', () => {
+  it('merges repeats of the same change into one history step', () => {
+    const b = id('b.jpg')
+    const s = defaultSettings('display')
+    for (const v of [0.1, 0.2, 0.3]) {
+      s.exposure = v
+      dev.setDevelop(lib.db, b, s, 'Exposure')
+    }
+    s.contrast = 10
+    dev.setDevelop(lib.db, b, s, 'Contrast')
+    const h = dev.history(lib.db, b)
+    expect(h.map((x) => x.label)).toEqual(['Exposure', 'Contrast'])
+    expect(h[0].settings.exposure).toBe(0.3)
+    dev.setDevelop(lib.db, b, null, 'Reset')
+  })
+
   it('saves settings with history; default settings reset the photo', () => {
     const a = id('a.jpg')
     expect(dev.kindOf(lib.db, a)).toBe('display')

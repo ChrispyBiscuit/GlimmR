@@ -54,7 +54,7 @@ export class AppContext {
   private developTimers = new Map<number, NodeJS.Timeout>()
 
   /** Re-renders a developed photo's previews soon (edits arrive in bursts while sliders move). */
-  queueDeveloped(id: number, delay = 600): void {
+  queueDeveloped(id: number, delay = 2000): void {
     clearTimeout(this.developTimers.get(id))
     this.developTimers.set(
       id,

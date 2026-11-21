@@ -10,7 +10,7 @@ import { BLUR, DISPLAY, GRID, OUTPUT, PRESENT, SCENE, TO_LAB, VERT } from './sha
 
 type GL = WebGL2RenderingContext
 
-interface Target {
+export interface Target {
   tex: WebGLTexture
   fb: WebGLFramebuffer
   w: number
@@ -370,6 +370,15 @@ export class DevelopGL {
     const out = new Uint8Array(t.w * t.h * 4)
     gl.readPixels(0, 0, t.w, t.h, gl.RGBA, gl.UNSIGNED_BYTE, out)
     return out
+  }
+
+  /** One pixel of an 8-bit target (x, y in image pixels from the top left), as 0–1 RGB. */
+  pixel(t: Target, x: number, y: number): [number, number, number] {
+    const gl = this.gl
+    gl.bindFramebuffer(gl.FRAMEBUFFER, t.fb)
+    const out = new Uint8Array(4)
+    gl.readPixels(Math.min(t.w - 1, Math.max(0, Math.floor(x))), Math.min(t.h - 1, Math.max(0, Math.floor(y))), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, out)
+    return [out[0] / 255, out[1] / 255, out[2] / 255]
   }
 
   /** Forgets the grid (after the source or exposure-affecting settings change). */

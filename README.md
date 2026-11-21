@@ -249,6 +249,20 @@ Electron main (Node)                                    Renderer (React + shadcn
 | `Alt ←` / `Alt →` (Windows), `⌘ [` / `⌘ ]` (macOS), mouse side buttons | Back / forward |
 | `Ctrl/⌘` + scroll, or pinch | Photo size in the grid |
 
+With Settings → Labs → Develop on:
+
+| Key | Action |
+|---|---|
+| `D` | Develop the photo (grid or viewer) |
+| `\` / `Y` | Before / split before and after |
+| `J` | Clipping overlay |
+| `W` | White balance picker |
+| `Z` / click | Zoom in and back to fit |
+| `Ctrl/⌘ Z`, `Ctrl/⌘ Shift Z` | Undo, redo |
+| `Ctrl/⌘ Shift C` / `V` | Copy / paste develop settings (paste works on a selection in the grid) |
+| `Ctrl/⌘ Shift E` | Export |
+| `←` / `→` | Previous / next photo in the filmstrip |
+
 ## Performance
 
 Measured on a synthetic catalog of 100,000 photos (15 metadata fields and 2 keywords each) in this
@@ -274,6 +288,9 @@ v1.0 MVP: the PRD's P0 requirements are implemented, with these gaps:
 - Dragging photos onto an album (ORG-1) isn't built yet. Use the selection bar, the context menu or "+" in
   the sidebar instead.
 - Performance targets are met for most queries; see the table above.
+
+Develop (editing, styles and LUTs, export) is in progress on the `claude/develop-module` branch, behind
+Settings → Labs. See [docs/DEVELOP_PRD.md](docs/DEVELOP_PRD.md) §15.
 
 Planned next (P1): folder watching, RAW+JPEG stacking, map view, color search, compare view and automatic XMP
 writing.
