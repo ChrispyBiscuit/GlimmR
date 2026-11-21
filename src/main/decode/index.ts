@@ -5,6 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { Worker } from 'node:worker_threads'
 import { decodeDirect, hasDecoder } from './decoders'
+import { decodeRawSource, type RawSource } from './raw'
 import type { Decoded } from './types'
 
 export { hasDecoder }
@@ -14,7 +15,9 @@ interface Job {
   id: number
   file: string
   ext: string
-  resolve: (d: Decoded) => void
+  op?: 'decode' | 'raw'
+  half?: boolean
+  resolve: (d: any) => void
   reject: (e: Error) => void
 }
 
@@ -60,7 +63,7 @@ function pump(): void {
     if (!slot) break
     const job = queue.shift()!
     slot.job = job
-    slot.w.postMessage({ id: job.id, file: job.file, ext: job.ext })
+    slot.w.postMessage({ id: job.id, file: job.file, ext: job.ext, op: job.op, half: job.half })
   }
   clearTimeout(idleTimer)
   // Free the decoders' memory when nothing has needed them for a while.
@@ -68,6 +71,15 @@ function pump(): void {
     idleTimer = setTimeout(() => {
       for (const s of workers.splice(0)) void s.w.terminate()
     }, IDLE_MS).unref()
+}
+
+/** Develops a raw file to linear camera RGB with LibRaw, on a decoding thread. */
+export function decodeRaw(file: string, half = false): Promise<RawSource> {
+  if (!workerFile()) return fs.promises.readFile(file).then((b) => decodeRawSource(new Uint8Array(b), { half }))
+  return new Promise((resolve, reject) => {
+    queue.push({ id: nextId++, file, ext: '', op: 'raw', half, resolve, reject })
+    pump()
+  })
 }
 
 export function decodeFile(file: string, ext: string): Promise<Decoded> {

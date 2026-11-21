@@ -61,7 +61,7 @@ export interface Params {
   shadows: number
   highlights: number
   contrast: number
-  /** Scene value that maps to white. */
+  /** Stretch of the tone curve above grey (whites) and below it (blacks). */
   white: number
   blacks: number
   curve: Float32Array | null
@@ -80,9 +80,8 @@ export interface Params {
   wb: { temp: number; tint: number }
 }
 
-/** Middle grey in the scene, and a small exposure bias so it lands near sRGB 0.46 after the tone map. */
+/** Middle grey in the scene; the tone map puts it at display 0.18 (sRGB 0.46). */
 export const GREY = 0.18
-const TONE_BIAS = 1.18
 /** Local brightness grid: cells along the long edge. */
 export const GRID_CELLS = 96
 export const HUE_CENTERS = [29, 60, 105, 142, 195, 264, 300, 330]
@@ -135,8 +134,9 @@ export function prepare(s: DevelopSettings, src: SourceInfo, scale = 1, out: Out
     shadows: s.shadows / 100,
     highlights: s.highlights / 100,
     contrast: (s.contrast / 100) * 0.35 + 0.08,
-    white: Math.pow(2, 4.3 - (s.whites / 100) * 1.3),
-    blacks: (s.blacks / 100) * 0.04,
+    // Stretch of the curve above grey (whites +: brighter, clips sooner) and below it (blacks +: lifted shadows).
+    white: 1 + (s.whites / 100) * 0.35,
+    blacks: 1 - (s.blacks / 100) * 0.3,
     curve: curveIsIdentity(s.curve) ? null : curveTable(s.curve),
     vibrance: s.vibrance / 100,
     saturation: s.saturation / 100,
@@ -219,26 +219,36 @@ export function toneScene(p: Params, c: Vec3, local: number): Vec3 {
   return x
 }
 
-/** Stage 3: tone map to display-referred, with whites and blacks; highlights roll off and desaturate to white. */
+/**
+ * Stage 3: tone map to display-referred. A logistic curve in stops around middle grey, as film and camera curves are
+ * shaped: grey lands on sRGB 0.46, shadows get a toe, highlights roll off and desaturate to white. Whites stretch the
+ * top of the curve, blacks the bottom.
+ */
 export function toneMap(p: Params, c: Vec3): Vec3 {
-  const x: Vec3 = [Math.max(0, c[0] * TONE_BIAS), Math.max(0, c[1] * TONE_BIAS), Math.max(0, c[2] * TONE_BIAS)]
+  const x: Vec3 = [Math.max(0, c[0]), Math.max(0, c[1]), Math.max(0, c[2])]
   const Y = luma(x)
-  const W2 = p.white * p.white
-  const Yd = (Y * (1 + Y / W2)) / (1 + Y)
-  const k = Y > 1e-8 ? Yd / Y : 0
+  const Yd = toneCurve(p, Y)
+  const k = Y > 1e-10 ? Yd / Y : 0
   let d: Vec3 = [x[0] * k, x[1] * k, x[2] * k]
   const m = Math.max(d[0], d[1], d[2])
   if (m > 1) {
     const yd = Math.min(Yd, 1)
-    const t = m - yd > 1e-6 ? (1 - yd) / (m - yd) : 0
-    d = [yd + (d[0] - yd) * t, yd + (d[1] - yd) * t, yd + (d[2] - yd) * t]
+    const tt = m - yd > 1e-6 ? (1 - yd) / (m - yd) : 0
+    d = [yd + (d[0] - yd) * tt, yd + (d[1] - yd) * tt, yd + (d[2] - yd) * tt]
   }
-  const b = p.blacks
-  d = d.map((v) => {
-    const y = b >= 0 ? b + (1 - b) * v : (v + b) / (1 + b)
-    return Math.min(1, Math.max(0, y))
-  }) as Vec3
-  return d
+  return [Math.min(1, Math.max(0, d[0])), Math.min(1, Math.max(0, d[1])), Math.min(1, Math.max(0, d[2]))]
+}
+
+/** Slope of the tone curve at grey (in stops); 0.845 would leave mid-tones linear. */
+export const TONE_SLOPE = 1.05
+const TONE_OFFSET = Math.log(1 / GREY - 1) / TONE_SLOPE
+
+/** Scene luminance → display luminance (see toneMap). */
+export function toneCurve(p: Params, Y: number): number {
+  let st = Math.log2(Math.max(Y, 1e-10) / GREY)
+  st = st > 0 ? st * p.white : st * p.blacks
+  // Logistic in stops, centred so that grey (st = 0) gives exactly GREY.
+  return 1 / (1 + Math.exp(-TONE_SLOPE * (st - TONE_OFFSET)))
 }
 
 /** Stage 4: tone curve, in the sRGB-encoded domain. */
