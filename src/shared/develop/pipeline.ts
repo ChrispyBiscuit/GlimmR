@@ -33,6 +33,7 @@ import {
 } from './color'
 import { curveIsIdentity, curveTable, sampleCurve } from './curves'
 import { applyLut, type Lut } from './lut'
+import { dabsOf, localAt, prepareLayers, rangeLum, wbShift, ZERO_LOCAL, type Local, type PreparedLayer } from './layers'
 import { WB_PRESETS, type DevelopSettings, type SourceKind } from './settings'
 
 /** What the pipeline needs to know about a source image. */
@@ -78,6 +79,8 @@ export interface Params {
   outputMatrix: Mat3
   /** The white balance actually used (kelvin and tint for raw), for the interface. */
   wb: { temp: number; tint: number }
+  /** Visible layers with adjustments, in render units. */
+  layers: PreparedLayer[]
 }
 
 /** Middle grey in the scene; the tone map puts it at display 0.18 (sRGB 0.46). */
@@ -171,7 +174,8 @@ export function prepare(s: DevelopSettings, src: SourceInfo, scale = 1, out: Out
       colorSigma: Math.max(0.35, (1 + (s.noise.color / 100) * 5) * scale)
     },
     outputMatrix: convert('rec2020', out),
-    wb
+    wb,
+    layers: prepareLayers(s.layers ?? [])
   }
 }
 
@@ -209,17 +213,25 @@ export function sceneOf(p: Params, c: Vec3): Vec3 {
   return [r[0] * p.exposure, r[1] * p.exposure, r[2] * p.exposure]
 }
 
+/** Layers' exposure and white balance, on a scene value. */
+export function localScene(c: Vec3, loc: Local): Vec3 {
+  if (!loc.exposure && !loc.temp && !loc.tint) return c
+  const e = Math.pow(2, loc.exposure)
+  const m = wbShift(loc.temp, loc.tint)
+  return [c[0] * e * m[0], c[1] * e * m[1], c[2] * e * m[2]]
+}
+
 /** Log brightness relative to grey, what the local grid averages. */
 export const logLum = (c: Vec3): number => Math.log2(Math.max(luma(c), 1e-5) / GREY)
 
 /** Stage 2: highlights and shadows (from local brightness), contrast. Scene-referred in and out. */
-export function toneScene(p: Params, c: Vec3, local: number): Vec3 {
+export function toneScene(p: Params, c: Vec3, local: number, loc: Local = ZERO_LOCAL): Vec3 {
   const ws = 1 - smoothstep(-4, 0, local)
   const wh = smoothstep(0, 3, local)
-  const g = Math.pow(2, p.shadows * 1.6 * ws + p.highlights * 1.6 * wh)
+  const g = Math.pow(2, (p.shadows + loc.shadows) * 1.6 * ws + (p.highlights + loc.highlights) * 1.6 * wh)
   let x: Vec3 = [c[0] * g, c[1] * g, c[2] * g]
   const l = Math.log2(Math.max(luma(x), 1e-6) / GREY)
-  const gc = Math.pow(2, l * p.contrast)
+  const gc = Math.pow(2, l * (p.contrast + loc.contrast))
   x = [x[0] * gc, x[1] * gc, x[2] * gc]
   return x
 }
@@ -282,8 +294,8 @@ export function bandWeights(hueDeg: number): number[] {
 }
 
 /** Stage 5: colour, in Oklab: HSL bands, vibrance, saturation, black and white. */
-export function colorStage(p: Params, c: Vec3): Vec3 {
-  const touched = p.vibrance || p.saturation || p.bw || p.hue.some(Boolean) || p.sat.some(Boolean) || p.lum.some(Boolean)
+export function colorStage(p: Params, c: Vec3, loc: Local = ZERO_LOCAL): Vec3 {
+  const touched = p.vibrance || p.saturation || p.bw || p.hue.some(Boolean) || p.sat.some(Boolean) || p.lum.some(Boolean) || p.layers.some((l) => l.saturation)
   if (!touched) return c
   const [L0, a, b] = toOklab(c)
   let L = L0
@@ -298,7 +310,7 @@ export function colorStage(p: Params, c: Vec3): Vec3 {
   const hn = (((h % 360) + 360) % 360 - 50) / 25
   const skin = Math.exp(-(hn * hn))
   C *= 1 + p.vibrance * (1 - smoothstep(0, 0.22, C)) * (1 - 0.5 * skin)
-  C *= Math.max(0, 1 + p.saturation)
+  C *= Math.max(0, 1 + p.saturation) * Math.max(0, 1 + loc.saturation)
   if (p.bw) {
     L += sum(p.bwMix) * 0.25 * cw
     C = 0
@@ -446,8 +458,19 @@ export function renderReference(p: Params, src: Image3, lut: Lut | null = null):
   const { width: w, height: h } = src
   const scene = new Float32Array(w * h * 3)
   const logL = new Float32Array(w * h)
+  // Layers: their masks (the luminance range reads the base scene), summed per pixel.
+  const L = Math.max(w, h)
+  const dabs = p.layers.map((l) => l.shapes.map((sh) => (sh.kind === 'brush' ? dabsOf(sh, w / L, h / L) : [])))
+  const locals: Local[] = []
   for (let i = 0; i < w * h; i++) {
-    const c = sceneOf(p, [src.data[i * 3], src.data[i * 3 + 1], src.data[i * 3 + 2]])
+    let c = sceneOf(p, [src.data[i * 3], src.data[i * 3 + 1], src.data[i * 3 + 2]])
+    if (p.layers.length) {
+      const x = i % w
+      const y = Math.floor(i / w)
+      const loc = localAt(p.layers, w / L, h / L, (x + 0.5) / w, (y + 0.5) / h, rangeLum(luma(c)), dabs)
+      locals[i] = loc
+      c = localScene(c, loc)
+    }
     scene.set(c, i * 3)
     logL[i] = logLum(c)
   }
@@ -457,7 +480,7 @@ export function renderReference(p: Params, src: Image3, lut: Lut | null = null):
     for (let x = 0; x < w; x++) {
       const i = y * w + x
       const c: Vec3 = [scene[i * 3], scene[i * 3 + 1], scene[i * 3 + 2]]
-      disp.set(displayOf(p, c, sampleGrid(grid, (x + 0.5) / w, (y + 0.5) / h), lut), i * 3)
+      disp.set(displayOf(p, c, sampleGrid(grid, (x + 0.5) / w, (y + 0.5) / h), lut, locals[i]), i * 3)
     }
   const det = detailStage(p, { width: w, height: h, data: disp })
   const out = new Float32Array(w * h * 3)
@@ -466,12 +489,12 @@ export function renderReference(p: Params, src: Image3, lut: Lut | null = null):
 }
 
 /** Scene value and its local brightness → display-referred value (stages 2–5 and the display LUT). */
-export function displayOf(p: Params, c: Vec3, local: number, lut: Lut | null): Vec3 {
-  const t = toneScene(p, c, local)
+export function displayOf(p: Params, c: Vec3, local: number, lut: Lut | null, loc: Local = ZERO_LOCAL): Vec3 {
+  const t = toneScene(p, c, local, loc)
   let d = toneMap(p, t)
   if (lut && p.lut?.log) d = mixV(d, lutStage(p, lut, t), p.lut.amount)
   d = curveStage(p, d)
-  d = colorStage(p, d)
+  d = colorStage(p, d, loc)
   if (lut && p.lut && !p.lut.log) d = mixV(d, lutStage(p, lut, d), p.lut.amount)
   return d
 }

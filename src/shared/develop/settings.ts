@@ -2,6 +2,7 @@
 // as JSON. Additive to the existing crop/rotation edit (photos.edit). See docs/DEVELOP_PRD.md.
 
 import type { LutSpace } from './color'
+import { sanitizeLayers, type Layer } from './layers'
 
 export type WbMode = 'asShot' | 'auto' | 'daylight' | 'cloudy' | 'shade' | 'tungsten' | 'fluorescent' | 'flash' | 'custom'
 
@@ -49,6 +50,8 @@ export interface DevelopSettings {
   noise: { luminance: number; color: number }
   /** The creative look: a LUT (by content hash, stored in the catalog) with its amount and input space. */
   look: { lut: string | null; name: string; amount: number; space: LutSpace }
+  /** Local adjustments with masks (see layers.ts), applied in order on top of the settings above. */
+  layers: Layer[]
   /** Names of styles applied, for search. */
   styles: string[]
 }
@@ -74,6 +77,7 @@ export function defaultSettings(kind: SourceKind): DevelopSettings {
     sharpen: kind === 'raw' ? { amount: 40, radius: 1, detail: 25, masking: 0 } : { amount: 0, radius: 1, detail: 25, masking: 0 },
     noise: kind === 'raw' ? { luminance: 0, color: 25 } : { luminance: 0, color: 0 },
     look: { lut: null, name: '', amount: 1, space: 'srgb' },
+    layers: [],
     styles: []
   }
 }
@@ -87,7 +91,8 @@ export const GROUPS = {
   hsl: { label: 'Colour (HSL)', keys: ['hsl'] },
   bw: { label: 'Black and white', keys: ['bw'] },
   detail: { label: 'Sharpening and noise', keys: ['sharpen', 'noise'] },
-  look: { label: 'Look (LUT)', keys: ['look'] }
+  look: { label: 'Look (LUT)', keys: ['look'] },
+  layers: { label: 'Layers', keys: ['layers'] }
 } as const satisfies Record<string, { label: string; keys: (keyof DevelopSettings)[] }>
 export type Group = keyof typeof GROUPS
 export const ALL_GROUPS = Object.keys(GROUPS) as Group[]
@@ -158,6 +163,7 @@ export function sanitize(input: unknown, kind: SourceKind): DevelopSettings {
     temp: kind === 'raw' ? c(s.wb.temp, 2000, 50000, 5500) : c(s.wb.temp, -100, 100, 0),
     tint: kind === 'raw' ? c(s.wb.tint, -150, 150, 0) : c(s.wb.tint, -100, 100, 0)
   }
+  s.layers = sanitizeLayers((input as Record<string, unknown>).layers)
   s.styles = Array.isArray(s.styles) ? s.styles.filter((x) => typeof x === 'string').slice(0, 20) : []
   return s
 }

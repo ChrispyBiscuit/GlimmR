@@ -225,6 +225,12 @@ Released in 1.0.11 behind a Labs switch. From 1.0.12 it's on by default and is w
   - An "Edited" badge, and the `is:developed` and `style:` searches.
   - Export to JPEG, PNG or TIFF (8/16-bit), sRGB or Display P3, with size, screen sharpening and metadata options.
   - Prints use the developed image.
+- Layers (MK-1–3, brought forward from phase 2):
+  - Up to 16 layers, each with exposure, contrast, highlights, shadows, temperature, tint, saturation and opacity.
+  - Masks are built from brush strokes (size, feather, density; erase), linear and radial gradients with on-photo
+    handles, an optional brightness range, and invert.
+  - Masks are stored resolution-independent, so preview, export (tiled) and print match. The GPU result is checked
+    against the CPU reference: max difference 1/255.
 - Catalog: additive tables and columns only (BR-4). History keeps 100 steps per photo, and repeats of one change
   merge into a single step.
 

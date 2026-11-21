@@ -22,6 +22,8 @@ import { LookThumbs, lutFor, shrink } from '../../develop/thumbs'
 import { Adjustments, type HslTab } from './panels'
 import { HistoryPanel, LooksPanel, lookSettings, type Look } from './looks'
 import { ExportDialog } from './ExportDialog'
+import { LayerList, LayerPanel, updateLayer, type BrushOptions, type MaskTool } from './layers-ui'
+import { MAX_LAYERS, newLayer, prepareLayer, type BrushStroke, type Layer, type MaskShape } from '../../../../shared/develop/layers'
 import { convert, mul3, srgbDecode, toOklab } from '../../../../shared/develop/color'
 import { bandWeights, prepare } from '../../../../shared/develop/pipeline'
 import { ALL_GROUPS, applyPartial, changedGroups, defaultSettings, GROUPS, pick, type DevelopSettings, type Group, type SourceKind } from '../../../../shared/develop/settings'
@@ -217,6 +219,26 @@ export function DevelopView() {
   const [exportIds, setExportIds] = useState<number[] | null>(null)
   const [groupsAsk, setGroupsAsk] = useState<'copy' | 'style' | null>(null)
   const [canvasSize, setCanvasSize] = useState({ w: 1, h: 1 })
+  // Layers: the selected one (null: Background, the photo's own settings), the mask tool and brush.
+  const [activeLayer, setActiveLayer] = useState<string | null>(null)
+  const [tool, setTool] = useState<MaskTool>(null)
+  const [showMask, setShowMask] = useState(false)
+  const [brush, setBrushState] = useState<BrushOptions>(() => {
+    try {
+      return { size: 0.03, feather: 0.5, density: 1, ...(JSON.parse(localStorage.getItem('glimmr.develop.brush') ?? '{}') as Partial<BrushOptions>) }
+    } catch {
+      return { size: 0.03, feather: 0.5, density: 1 }
+    }
+  })
+  const setBrush = (b: BrushOptions): void => {
+    setBrushState(b)
+    try {
+      localStorage.setItem('glimmr.develop.brush', JSON.stringify(b))
+    } catch {
+      // Not remembered.
+    }
+  }
+  const [hoverPt, setHoverPt] = useState<{ x: number; y: number } | null>(null)
   const [lutVersion, setLutVersion] = useState(0)
   const loadedLut = useRef<string | null>(null)
   const [open, setOpenState] = useState<Record<string, boolean>>(() => {
@@ -501,7 +523,9 @@ export function DevelopView() {
         const p = prepare(use, info, scale)
         const wb = { temp: Math.round(p.wb.temp), tint: Math.round(p.wb.tint) }
         if (wb.temp !== wbShown.temp || wb.tint !== wbShown.tint) setWbShown(wb)
-        const out = e.render(p, { clipping })
+        const sel = activeLayer ? shown.layers.find((l) => l.id === activeLayer) : null
+        const out = e.render(p, { clipping, overlay: showMask && sel ? prepareLayer(sel) : null })
+        const overlay = e.overlayMask
         lastOut.current = out
         lastParams.current = p
         // The histogram follows once changes pause (reading pixels back stalls the GPU).
@@ -525,7 +549,7 @@ export function DevelopView() {
         const h = src.height * g.scale
         const view: [number, number, number, number] = [g.left / g.W, 1 - (g.top + h) / g.H, w / g.W, h / g.H]
         if (before === 'full' && beforeRef.current) e.present(beforeRef.current, view, { bg: BG })
-        else e.present(out, view, { before: before === 'split' ? beforeRef.current : null, splitAt, bg: BG })
+        else e.present(out, view, { before: before === 'split' ? beforeRef.current : null, splitAt, bg: BG, overlay })
       } catch (err) {
         setGlError((err as Error).message)
       }
@@ -533,7 +557,7 @@ export function DevelopView() {
     return () => cancelAnimationFrame(raf)
     // wbShown is only compared, to avoid loops.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [src, uploaded, shown, before, splitAt, clipping, canvasSize, geometry, lutVersion, catalogKind])
+  }, [src, uploaded, shown, before, splitAt, clipping, canvasSize, geometry, lutVersion, catalogKind, activeLayer, showMask])
 
   // ---- pointer ----
 
@@ -546,7 +570,34 @@ export function DevelopView() {
     return { x, y, inside: !!src && x >= 0 && y >= 0 && x < src.width && y < src.height }
   }
 
-  const gesture = useRef<{ kind: 'pan' | 'target' | 'split' | 'click'; x0: number; y0: number; z?: Zoom; base?: DevelopSettings; weights?: number[]; moved: boolean } | null>(null)
+  const gesture = useRef<{
+    kind: 'pan' | 'target' | 'split' | 'click' | 'paint' | 'linear' | 'radial' | 'handle'
+    x0: number
+    y0: number
+    z?: Zoom
+    base?: DevelopSettings
+    weights?: number[]
+    moved: boolean
+    layer?: string
+    index?: number
+    handle?: string
+  } | null>(null)
+
+  const layerObj: Layer | null = (activeLayer && settings?.layers.find((l) => l.id === activeLayer)) || null
+  const longEdge = src ? Math.max(src.width, src.height) : 1
+  /** Changes one shape of a layer's mask. */
+  const updateShape = (layerId: string, index: number, label: string, f: (sh: MaskShape) => MaskShape): void =>
+    updateLayer(change, layerId, label, (l) => ({ ...l, mask: { ...l.mask, shapes: l.mask.shapes.map((sh, i) => (i === index ? f(sh) : sh)) } }))
+
+  const addLayer = (kind: 'brush' | 'linear' | 'radial'): void => {
+    if (!settingsRef.current || settingsRef.current.layers.length >= MAX_LAYERS) return
+    const n = settingsRef.current.layers.length + 1
+    const l = newLayer(kind === 'brush' ? `Brush ${n}` : kind === 'linear' ? `Gradient ${n}` : `Radial ${n}`)
+    change('Add layer', (x) => ({ ...x, layers: [...x.layers, l] }))
+    commit()
+    setActiveLayer(l.id)
+    setTool(kind)
+  }
 
   const clampZoom = (z: Zoom): Zoom => {
     if (!z || !src) return z
@@ -586,6 +637,25 @@ export function DevelopView() {
         return
       }
     }
+    if (layerObj && tool) {
+      const u = p.x / src.width
+      const v = p.y / src.height
+      const index = layerObj.mask.shapes.length
+      const base = { x0: e.clientX, y0: e.clientY, moved: false, layer: layerObj.id, index }
+      if (tool === 'brush' || tool === 'erase') {
+        const erase = tool === 'erase' || e.altKey
+        const stroke: BrushStroke = { kind: 'brush', erase, size: brush.size, feather: brush.feather, density: brush.density, points: [+u.toFixed(5), +v.toFixed(5)] }
+        updateLayer(change, layerObj.id, erase ? 'Erase' : 'Brush', (l) => ({ ...l, mask: { ...l.mask, shapes: [...l.mask.shapes, stroke] } }))
+        gesture.current = { ...base, kind: 'paint' }
+      } else if (tool === 'linear') {
+        updateLayer(change, layerObj.id, 'Linear gradient', (l) => ({ ...l, mask: { ...l.mask, shapes: [...l.mask.shapes, { kind: 'linear', x0: u, y0: v, x1: u, y1: v }] } }))
+        gesture.current = { ...base, kind: 'linear' }
+      } else {
+        updateLayer(change, layerObj.id, 'Radial gradient', (l) => ({ ...l, mask: { ...l.mask, shapes: [...l.mask.shapes, { kind: 'radial', cx: u, cy: v, rx: 0.002, ry: 0.002, angle: 0, feather: 0.5, invert: false }] } }))
+        gesture.current = { ...base, kind: 'radial' }
+      }
+      return
+    }
     if (eyedropper) {
       if (!p.inside) return
       const wb = neutralAt(src, p.x, p.y)
@@ -613,6 +683,46 @@ export function DevelopView() {
     const dx = e.clientX - g0.x0
     const dy = e.clientY - g0.y0
     if (Math.abs(dx) + Math.abs(dy) > 3) g0.moved = true
+    if ((g0.kind === 'paint' || g0.kind === 'linear' || g0.kind === 'radial' || g0.kind === 'handle') && src && g0.layer != null && g0.index != null) {
+      const p = toImage(e)
+      const u = p.x / src.width
+      const v = p.y / src.height
+      const ax = src.width / longEdge
+      const ay = src.height / longEdge
+      const painted = g0.kind === 'paint' ? settingsRef.current?.layers.find((l) => l.id === g0.layer)?.mask.shapes[g0.index] : null
+      const label = g0.kind === 'paint' ? (painted?.kind === 'brush' && painted.erase ? 'Erase' : 'Brush') : g0.kind === 'linear' ? 'Linear gradient' : g0.kind === 'radial' ? 'Radial gradient' : 'Move mask'
+      updateShape(g0.layer, g0.index, label, (sh) => {
+        if (sh.kind === 'brush') {
+          const pts = sh.points
+          const lx = pts[pts.length - 2]
+          const ly = pts[pts.length - 1]
+          // Points every tenth of a radius are plenty: dabs are spaced along the line between them.
+          if (Math.hypot((u - lx) * ax, (v - ly) * ay) < sh.size * 0.1) return sh
+          return { ...sh, points: [...pts, +u.toFixed(5), +v.toFixed(5)] }
+        }
+        if (sh.kind === 'linear') {
+          if (g0.kind === 'linear' || g0.handle === 'b') return { ...sh, x1: u, y1: v }
+          if (g0.handle === 'a') return { ...sh, x0: u, y0: v }
+          // Move the whole gradient.
+          const du = u - (sh.x0 + sh.x1) / 2
+          const dv = v - (sh.y0 + sh.y1) / 2
+          return { ...sh, x0: sh.x0 + du, y0: sh.y0 + dv, x1: sh.x1 + du, y1: sh.y1 + dv }
+        }
+        const dx = (u - sh.cx) * ax
+        const dy = (v - sh.cy) * ay
+        if (g0.kind === 'radial') {
+          const r = Math.max(0.002, Math.hypot(dx, dy))
+          return { ...sh, rx: r, ry: r }
+        }
+        if (g0.handle === 'c') return { ...sh, cx: u, cy: v }
+        // Radius handles: along the ellipse's own axes.
+        const c = Math.cos(sh.angle)
+        const sn = Math.sin(sh.angle)
+        if (g0.handle === 'rx') return { ...sh, rx: Math.max(0.002, Math.abs(dx * c + dy * sn)), angle: e.shiftKey ? Math.atan2(dy, dx) : sh.angle }
+        return { ...sh, ry: Math.max(0.002, Math.abs(-dx * sn + dy * c)) }
+      })
+      return
+    }
     if (g0.kind === 'split') {
       const r = wrapRef.current!.getBoundingClientRect()
       setSplitAt(Math.min(0.98, Math.max(0.02, (e.clientX - r.left) / r.width)))
@@ -633,7 +743,7 @@ export function DevelopView() {
     const g0 = gesture.current
     gesture.current = null
     if (!g0) return
-    if (g0.kind === 'target') commit()
+    if (g0.kind === 'target' || g0.kind === 'paint' || g0.kind === 'linear' || g0.kind === 'radial' || g0.kind === 'handle') commit()
     else if (!g0.moved && (g0.kind === 'click' || g0.kind === 'pan')) {
       // Click: 100% at the point, or back to fit.
       if (zoom) setZoom(null)
@@ -705,7 +815,9 @@ export function DevelopView() {
         if (eyedropper || targeted) {
           setEyedropper(false)
           setTargeted(null)
-        } else close()
+        } else if (tool) setTool(null)
+        else if (activeLayer) setActiveLayer(null)
+        else close()
         return
       }
       if (mod && k === 'z') {
@@ -735,6 +847,15 @@ export function DevelopView() {
       if (k === 'y') return setBefore((b) => (b === 'split' ? 'off' : 'split'))
       if (k === 'j') return setClipping((c) => !c)
       if (k === 'w') return setEyedropper((x) => !x)
+      // Layers: B brush, E erase, G linear gradient, R radial gradient (a new layer when Background is selected), O mask.
+      if (k === 'b' || k === 'g' || k === 'r') {
+        const t = k === 'b' ? 'brush' : k === 'g' ? 'linear' : 'radial'
+        if (!layerObj) return addLayer(t)
+        return setTool((x) => (x === t ? null : t))
+      }
+      if (k === 'e' && layerObj) return setTool((x) => (x === 'erase' ? null : 'erase'))
+      if (k === 'o' && layerObj) return setShowMask((x) => !x)
+      if ((e.key === '[' || e.key === ']') && (tool === 'brush' || tool === 'erase')) return setBrush({ ...brush, size: Math.min(0.3, Math.max(0.002, brush.size * (e.key === ']' ? 1.25 : 0.8))) })
       if (k === 'z') {
         e.preventDefault()
         return zoom ? setZoom(null) : zoomAround(1)
@@ -765,8 +886,74 @@ export function DevelopView() {
     </Tooltip>
   )
 
+  /** Gradient handles and the brush cursor, drawn over the photo (CSS pixels). */
+  const MaskHandles = (): React.ReactElement | null => {
+    if (!src || !layerObj) return null
+    const g = geometry()
+    const dpr = window.devicePixelRatio || 1
+    const at = (u: number, v: number): [number, number] => [(g.left + u * src.width * g.scale) / dpr, (g.top + v * src.height * g.scale) / dpr]
+    const px = (r: number): number => (r * longEdge * g.scale) / dpr
+    const grab = (index: number, handle: string) => (e: React.PointerEvent): void => {
+      if (e.button !== 0) return
+      e.stopPropagation()
+      wrapRef.current!.setPointerCapture(e.pointerId)
+      gesture.current = { kind: 'handle', x0: e.clientX, y0: e.clientY, moved: false, layer: layerObj.id, index, handle }
+    }
+    const dot = (x: number, y: number, index: number, handle: string, label: string) => (
+      <circle key={`${index}${handle}`} cx={x} cy={y} r={6} className="cursor-move fill-white stroke-black/60" strokeWidth={1.5} style={{ pointerEvents: 'auto' }} onPointerDown={grab(index, handle)} aria-label={label} />
+    )
+    const painting = tool === 'brush' || tool === 'erase'
+    return (
+      <svg className="pointer-events-none absolute inset-0 size-full" aria-hidden>
+        {!painting &&
+          layerObj.mask.shapes.map((sh, i) => {
+            if (sh.kind === 'linear') {
+              const a = at(sh.x0, sh.y0)
+              const b = at(sh.x1, sh.y1)
+              const dx = b[0] - a[0]
+              const dy = b[1] - a[1]
+              const len = Math.hypot(dx, dy) || 1
+              const nx = (-dy / len) * 2000
+              const ny = (dx / len) * 2000
+              const m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]
+              return (
+                <g key={i}>
+                  <line x1={a[0] - nx} y1={a[1] - ny} x2={a[0] + nx} y2={a[1] + ny} className="stroke-white/80" strokeWidth={1} />
+                  <line x1={b[0] - nx} y1={b[1] - ny} x2={b[0] + nx} y2={b[1] + ny} className="stroke-white/50" strokeDasharray="4 4" strokeWidth={1} />
+                  <line x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} className="stroke-white/80" strokeWidth={1} />
+                  {dot(a[0], a[1], i, 'a', 'Gradient start')}
+                  {dot(b[0], b[1], i, 'b', 'Gradient end')}
+                  <rect x={m[0] - 5} y={m[1] - 5} width={10} height={10} className="cursor-move fill-white stroke-black/60" style={{ pointerEvents: 'auto' }} onPointerDown={grab(i, 'm')} aria-label="Move gradient" />
+                </g>
+              )
+            }
+            if (sh.kind === 'radial') {
+              const c = at(sh.cx, sh.cy)
+              const deg = (sh.angle * 180) / Math.PI
+              const rx = px(sh.rx)
+              const ry = px(sh.ry)
+              const co = Math.cos(sh.angle)
+              const sn = Math.sin(sh.angle)
+              return (
+                <g key={i}>
+                  <ellipse cx={c[0]} cy={c[1]} rx={rx} ry={ry} transform={`rotate(${deg} ${c[0]} ${c[1]})`} className="fill-none stroke-white/80" strokeWidth={1} />
+                  <ellipse cx={c[0]} cy={c[1]} rx={rx * (1 - sh.feather)} ry={ry * (1 - sh.feather)} transform={`rotate(${deg} ${c[0]} ${c[1]})`} className="fill-none stroke-white/40" strokeDasharray="4 4" strokeWidth={1} />
+                  {dot(c[0], c[1], i, 'c', 'Move')}
+                  {dot(c[0] + rx * co, c[1] + rx * sn, i, 'rx', 'Width (Shift to rotate)')}
+                  {dot(c[0] - ry * sn, c[1] + ry * co, i, 'ry', 'Height')}
+                </g>
+              )
+            }
+            return null
+          })}
+        {painting && hoverPt && <circle cx={hoverPt.x} cy={hoverPt.y} r={Math.max(2, px(brush.size))} className={cn('fill-none', tool === 'erase' ? 'stroke-red-300' : 'stroke-white')} strokeWidth={1.5} />}
+        {painting && hoverPt && <circle cx={hoverPt.x} cy={hoverPt.y} r={Math.max(1, px(brush.size) * (1 - brush.feather))} className="fill-none stroke-white/40" strokeWidth={1} />}
+      </svg>
+    )
+  }
+
   const edited = !!settings && (changedGroups(settings, catalogKind).length > 0 || settings.styles.length > 0)
-  const cursor = eyedropper || targeted ? 'crosshair' : zoom ? 'grab' : 'zoom-in'
+  const cursor = layerObj && (tool === 'brush' || tool === 'erase') ? 'none' : (layerObj && tool) || eyedropper || targeted ? 'crosshair' : zoom ? 'grab' : 'zoom-in'
   const currentSeq = history.length && committed ? (history.findLast((h) => JSON.stringify(h.settings) === JSON.stringify(committed))?.seq ?? null) : null
 
   return (
@@ -870,7 +1057,14 @@ export function DevelopView() {
         className="relative min-h-0 min-w-0 overflow-hidden"
         style={{ cursor }}
         onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
+        onPointerMove={(e) => {
+          if (tool === 'brush' || tool === 'erase') {
+            const r = wrapRef.current!.getBoundingClientRect()
+            setHoverPt({ x: e.clientX - r.left, y: e.clientY - r.top })
+          }
+          onPointerMove(e)
+        }}
+        onPointerLeave={() => setHoverPt(null)}
         onPointerUp={onPointerUp}
         onWheel={onWheel}
       >
@@ -887,6 +1081,7 @@ export function DevelopView() {
           </>
         )}
         {before === 'full' && <span className="pointer-events-none absolute top-3 left-3 rounded bg-black/60 px-1.5 py-0.5 text-[11px]">Before</span>}
+        {src && layerObj && <MaskHandles />}
         {hover && <span className="pointer-events-none absolute bottom-3 left-3 rounded bg-black/60 px-1.5 py-0.5 text-[11px]">Previewing {hover.kind === 'style' ? hover.style.name : hover.lut.name}</span>}
         {zoom && src && (
           <span className="tnum pointer-events-none absolute right-3 bottom-3 rounded bg-black/60 px-1.5 py-0.5 text-[11px]" title="Of the original’s full size">
@@ -918,7 +1113,20 @@ export function DevelopView() {
             </div>
           )}
         </div>
-        {styleAmt && settings && (
+        {settings && (
+          <LayerList
+            s={settings}
+            active={activeLayer}
+            setActive={(id) => {
+              setActiveLayer(id)
+              if (!id) setTool(null)
+            }}
+            change={change}
+            commit={commit}
+            setTool={setTool}
+          />
+        )}
+        {styleAmt && settings && !layerObj && (
           <div className="flex flex-col gap-1.5 border-b border-white/10 p-3">
             <div className="flex justify-between text-[12px]">
               <span className="truncate">{styleAmt.style.name}</span>
@@ -939,7 +1147,22 @@ export function DevelopView() {
           </div>
         )}
         <div className="min-h-0 flex-1 overflow-y-auto">
-          {settings && (
+          {settings && layerObj && (
+            <LayerPanel
+              layer={layerObj}
+              change={change}
+              commit={commit}
+              tool={tool}
+              setTool={setTool}
+              brush={brush}
+              setBrush={setBrush}
+              showMask={showMask}
+              setShowMask={setShowMask}
+              open={open}
+              setOpen={setOpen}
+            />
+          )}
+          {settings && !layerObj && (
             <Adjustments
               s={settings}
               kind={kind}
@@ -997,7 +1220,7 @@ export function DevelopView() {
           initial={(() => {
             const ch = changedGroups(settings, catalogKind)
             // White balance and detail are usually per photo; leave them out unless they're all that changed.
-            const pref = ch.filter((g) => g !== 'wb' && (groupsAsk === 'copy' || g !== 'detail'))
+            const pref = ch.filter((g) => g !== 'wb' && g !== 'layers' && (groupsAsk === 'copy' || g !== 'detail'))
             return pref.length ? pref : ch.length ? ch : ALL_GROUPS.filter((g) => g !== 'wb')
           })()}
           onDone={(r) => {

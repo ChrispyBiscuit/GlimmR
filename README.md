@@ -261,6 +261,10 @@ Editing in Glimmr (on by default; Settings → Editors):
 | `Ctrl/⌘ Z`, `Ctrl/⌘ Shift Z` | Undo, redo |
 | `Ctrl/⌘ Shift C` / `V` | Copy / paste develop settings (paste works on a selection in the grid) |
 | `Ctrl/⌘ Shift E` | Export |
+| `B` / `G` / `R` | Brush / linear gradient / radial gradient layer (a new layer from Background) |
+| `E`, `Alt`-drag | Erase from the selected layer's mask |
+| `[` / `]` | Brush size |
+| `O` | Show the selected layer's mask |
 | `←` / `→` | Previous / next photo in the filmstrip |
 
 ## Performance

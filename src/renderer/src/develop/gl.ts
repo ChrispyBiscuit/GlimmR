@@ -6,7 +6,8 @@ import { LAB_TO_LMS, LMS_TO_LAB, LMS_TO_REC2020, REC2020_TO_LMS, type Mat3 } fro
 import { CURVE_SIZE } from '../../../shared/develop/curves'
 import type { Lut } from '../../../shared/develop/lut'
 import { GRID_CELLS, HUE_CENTERS, TONE_SLOPE, type Params } from '../../../shared/develop/pipeline'
-import { BLUR, DISPLAY, GRID, OUTPUT, PRESENT, SCENE, TO_LAB, VERT } from './shaders'
+import { dabsOf, type BrushStroke, type PreparedLayer } from '../../../shared/develop/layers'
+import { BLUR, DAB, DISPLAY, GRADIENT, GRID, LAYER_ACC, LOCAL_SCENE, OUTPUT, PRESENT, SCENE, TO_LAB, VERT, VERT_DAB } from './shaders'
 
 type GL = WebGL2RenderingContext
 
@@ -36,6 +37,12 @@ export class DevelopGL {
   private lutInfo: { size: number; shaper: number; key: string } = { size: 0, shaper: 0, key: '' }
   /** The local brightness grid, blurred: computed from the whole image (or the editing copy) and reused by tiles. */
   private grid: Target | null = null
+  /** 1×1 zeros, bound where there are no layers. */
+  private zero: WebGLTexture
+  private dabBuf: WebGLBuffer
+  private dabCache = new WeakMap<BrushStroke, { ax: number; ay: number; data: Float32Array }>()
+  /** The last overlay mask rendered (render's `overlay` option). */
+  overlayMask: Target | null = null
 
   constructor(canvas: HTMLCanvasElement | OffscreenCanvas) {
     const gl = canvas.getContext('webgl2', { antialias: false, premultipliedAlpha: false, preserveDrawingBuffer: true }) as GL | null
@@ -49,6 +56,9 @@ export class DevelopGL {
     this.curveTex = this.makeTex()
     this.lut3 = gl.createTexture()!
     this.shaper = this.makeTex()
+    this.zero = this.makeTex(gl.NEAREST)
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, 1, 1, 0, gl.RGBA, gl.HALF_FLOAT, new Uint16Array(4))
+    this.dabBuf = gl.createBuffer()!
   }
 
   get maxTexture(): number {
@@ -86,7 +96,7 @@ export class DevelopGL {
     return t
   }
 
-  private prog(name: string, src: string): WebGLProgram {
+  private prog(name: string, src: string, vert = VERT): WebGLProgram {
     const hit = this.progs.get(name)
     if (hit) return hit
     const gl = this.gl
@@ -98,9 +108,10 @@ export class DevelopGL {
       return o
     }
     const p = gl.createProgram()!
-    gl.attachShader(p, sh(gl.VERTEX_SHADER, VERT))
+    gl.attachShader(p, sh(gl.VERTEX_SHADER, vert))
     gl.attachShader(p, sh(gl.FRAGMENT_SHADER, src))
     gl.bindAttribLocation(p, 0, 'pos')
+    gl.bindAttribLocation(p, 1, 'center')
     gl.linkProgram(p)
     if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(`${name} program: ${gl.getProgramInfoLog(p)}`)
     this.progs.set(name, p)
@@ -188,6 +199,130 @@ export class DevelopGL {
     }, [['uSrc', this.src!]])
   }
 
+  private clearTarget(t: Target): void {
+    const gl = this.gl
+    gl.bindFramebuffer(gl.FRAMEBUFFER, t.fb)
+    gl.viewport(0, 0, t.w, t.h)
+    gl.clearColor(0, 0, 0, 0)
+    gl.clear(gl.COLOR_BUFFER_BIT)
+  }
+
+  /** Draws a layer's shapes, in order, into a mask target (gradients and strokes add; erasing strokes remove). */
+  private drawMask(l: PreparedLayer, gm: [number, number, number, number], to: Target): void {
+    const gl = this.gl
+    this.clearTarget(to)
+    const L = Math.max(gm[2], gm[3])
+    const ax = gm[2] / L
+    const ay = gm[3] / L
+    gl.enable(gl.BLEND)
+    for (const sh of l.shapes) {
+      if (sh.kind === 'brush') {
+        let c = this.dabCache.get(sh)
+        if (!c || c.ax !== ax || c.ay !== ay) {
+          c = { ax, ay, data: new Float32Array(dabsOf(sh, ax, ay)) }
+          this.dabCache.set(sh, c)
+        }
+        if (sh.erase) {
+          gl.blendEquation(gl.FUNC_ADD)
+          gl.blendFunc(gl.ZERO, gl.ONE_MINUS_SRC_COLOR)
+        } else {
+          gl.blendEquation(gl.MAX)
+          gl.blendFunc(gl.ONE, gl.ONE)
+        }
+        const p = this.prog('dab', DAB, VERT_DAB)
+        gl.useProgram(p)
+        gl.bindFramebuffer(gl.FRAMEBUFFER, to.fb)
+        gl.viewport(0, 0, to.w, to.h)
+        const u = (n: string): WebGLUniformLocation | null => gl.getUniformLocation(p, n)
+        gl.uniform4f(u('uMap'), gm[0], gm[1], gm[2], gm[3])
+        gl.uniform2f(u('uSrcSize'), to.w, to.h)
+        gl.uniform1f(u('uRadius'), sh.size)
+        gl.uniform1f(u('uFeather'), sh.feather)
+        gl.uniform1f(u('uDensity'), sh.density)
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.quad)
+        gl.enableVertexAttribArray(0)
+        gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0)
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.dabBuf)
+        gl.bufferData(gl.ARRAY_BUFFER, c.data, gl.STREAM_DRAW)
+        gl.enableVertexAttribArray(1)
+        gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0)
+        gl.vertexAttribDivisor(1, 1)
+        gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, c.data.length / 2)
+        gl.vertexAttribDivisor(1, 0)
+        gl.disableVertexAttribArray(1)
+      } else {
+        gl.blendEquation(gl.MAX)
+        gl.blendFunc(gl.ONE, gl.ONE)
+        this.pass('gradient', GRADIENT, to, (u) => {
+          gl.uniform4f(u('uMap'), gm[0], gm[1], gm[2], gm[3])
+          if (sh.kind === 'linear') {
+            gl.uniform1i(u('uKind'), 1)
+            gl.uniform4f(u('uA'), sh.x0, sh.y0, sh.x1, sh.y1)
+            gl.uniform3f(u('uB'), 0, 0, 0)
+          } else {
+            gl.uniform1i(u('uKind'), 2)
+            gl.uniform4f(u('uA'), sh.cx, sh.cy, sh.rx, sh.ry)
+            gl.uniform3f(u('uB'), sh.angle, sh.feather, sh.invert ? 1 : 0)
+          }
+        })
+      }
+    }
+    gl.disable(gl.BLEND)
+    gl.blendEquation(gl.FUNC_ADD)
+  }
+
+  /** One layer's finished mask (or its adjustments times the mask) into a target. */
+  private layerAcc(l: PreparedLayer, which: 1 | 2 | 3, mask: Target, scene: Target, to: Target): void {
+    const gl = this.gl
+    this.pass('layerAcc', LAYER_ACC, to, (u) => {
+      gl.uniform1i(u('uWhich'), which)
+      gl.uniform1f(u('uOpacity'), l.opacity)
+      gl.uniform1i(u('uInvert'), l.invert ? 1 : 0)
+      gl.uniform1i(u('uRangeOn'), l.range.on ? 1 : 0)
+      gl.uniform3f(u('uRange'), l.range.lo, l.range.hi, l.range.feather)
+      gl.uniform4f(u('uAdj1'), l.exposure, l.contrast, l.highlights, l.shadows)
+      gl.uniform4f(u('uAdj2'), l.temp, l.tint, l.saturation, 0)
+    }, [
+      ['uMask', mask.tex],
+      ['uScene', scene.tex]
+    ])
+  }
+
+  /**
+   * The scene with layers: the base scene, each layer's mask times its adjustments summed into two parameter
+   * textures, and the layers' exposure and white balance applied. Returns the parameter textures (null without
+   * layers).
+   */
+  private sceneWithLayers(p: Params, gm: [number, number, number, number], scene: Target): { l1: Target; l2: Target } | null {
+    if (!p.layers.length) {
+      this.scenePass(p, scene)
+      return null
+    }
+    const gl = this.gl
+    const base = this.target('scene0', this.srcW, this.srcH)
+    this.scenePass(p, base)
+    const mask = this.target('mask', this.srcW, this.srcH, 'r16')
+    const l1 = this.target('local1', this.srcW, this.srcH)
+    const l2 = this.target('local2', this.srcW, this.srcH)
+    this.clearTarget(l1)
+    this.clearTarget(l2)
+    for (const l of p.layers) {
+      this.drawMask(l, gm, mask)
+      gl.enable(gl.BLEND)
+      gl.blendEquation(gl.FUNC_ADD)
+      gl.blendFunc(gl.ONE, gl.ONE)
+      this.layerAcc(l, 1, mask, base, l1)
+      this.layerAcc(l, 2, mask, base, l2)
+      gl.disable(gl.BLEND)
+    }
+    this.pass('localScene', LOCAL_SCENE, scene, () => {}, [
+      ['uScene', base.tex],
+      ['uLocal1', l1.tex],
+      ['uLocal2', l2.tex]
+    ])
+    return { l1, l2 }
+  }
+
   /**
    * Computes the local brightness grid from the current source, which must be the whole picture (the editing copy
    * will do: the grid is coarse). Tiles of a big render reuse it.
@@ -195,7 +330,7 @@ export class DevelopGL {
   computeGrid(p: Params, sceneDone = false): void {
     const gl = this.gl
     const scene = this.target('scene', this.srcW, this.srcH)
-    if (!sceneDone) this.scenePass(p, scene)
+    if (!sceneDone) this.sceneWithLayers(p, [0, 0, this.srcW, this.srcH], scene)
     const cell = Math.max(1, Math.ceil(Math.max(this.srcW, this.srcH) / GRID_CELLS))
     const gw = Math.ceil(this.srcW / cell)
     const gh = Math.ceil(this.srcH / cell)
@@ -230,11 +365,26 @@ export class DevelopGL {
    * Renders the current source with these parameters into the 'out' target (RGBA8 encoded, or float linear).
    * `gridMap` places this source inside the whole picture for the local brightness grid (for tiles).
    */
-  render(p: Params, opts: { encode?: boolean; clipping?: boolean; float?: boolean; gridMap?: [number, number, number, number]; crop?: [number, number, number, number] } = {}): Target {
+  render(
+    p: Params,
+    opts: { encode?: boolean; clipping?: boolean; float?: boolean; gridMap?: [number, number, number, number]; crop?: [number, number, number, number]; overlay?: PreparedLayer | null } = {}
+  ): Target {
     const gl = this.gl
     if (!this.src) throw new Error('No source')
     const scene = this.target('scene', this.srcW, this.srcH)
-    this.scenePass(p, scene)
+    const gmap: [number, number, number, number] = opts.gridMap ?? [0, 0, this.srcW, this.srcH]
+    const local = this.sceneWithLayers(p, gmap, scene)
+    // A layer's mask for the overlay (selected in the Develop view).
+    this.overlayMask = null
+    if (opts.overlay) {
+      const base = this.target('scene0', this.srcW, this.srcH)
+      if (!local) this.scenePass(p, base)
+      const mask = this.target('mask', this.srcW, this.srcH, 'r16')
+      this.drawMask(opts.overlay, gmap, mask)
+      const show = this.target('maskShow', this.srcW, this.srcH, 'r16')
+      this.layerAcc(opts.overlay, 3, mask, base, show)
+      this.overlayMask = show
+    }
     // The grid depends on exposure and white balance, so it's recomputed, except for tiles (gridMap), which share the
     // grid computed from the whole picture.
     if (!opts.gridMap) this.computeGrid(p, true)
@@ -246,7 +396,7 @@ export class DevelopGL {
     }
     const disp = this.target('disp', this.srcW, this.srcH)
     const gm = opts.gridMap ?? [0, 0, this.srcW, this.srcH]
-    const touched = p.vibrance || p.saturation || p.bw || p.hue.some(Boolean) || p.sat.some(Boolean) || p.lum.some(Boolean)
+    const touched = p.vibrance || p.saturation || p.bw || p.hue.some(Boolean) || p.sat.some(Boolean) || p.lum.some(Boolean) || p.layers.some((l) => l.saturation)
     const lutMode = p.lut && (this.lutInfo.size || this.lutInfo.shaper) ? (p.lut.log ? 2 : 1) : 0
     this.pass(
       'display',
@@ -283,13 +433,16 @@ export class DevelopGL {
         gl.uniform3fv(u('uLutMax'), this.lutRange.max)
         gl.uniform1i(u('uShaperSize'), this.lutInfo.shaper)
         gl.uniform2fv(u('uShaperRange'), this.lutRange.shaper)
+        gl.uniform1i(u('uLocalOn'), local ? 1 : 0)
       },
       [
         ['uScene', scene.tex],
         ['uGrid', this.grid!.tex],
         ['uCurve', this.curveTex],
         ['uLut3', this.lut3, gl.TEXTURE_3D],
-        ['uShaper', this.shaper]
+        ['uShaper', this.shaper],
+        ['uLocal1', local?.l1.tex ?? this.zero],
+        ['uLocal2', local?.l2.tex ?? this.zero]
       ]
     )
     const d = p.detail
@@ -345,16 +498,18 @@ export class DevelopGL {
   }
 
   /** Draws a rendered image to the canvas at a place (in canvas uv units, y up), with an optional split. */
-  present(img: Target, view: [number, number, number, number], opts: { before?: Target | null; splitAt?: number; bg?: [number, number, number] } = {}): void {
+  present(img: Target, view: [number, number, number, number], opts: { before?: Target | null; splitAt?: number; bg?: [number, number, number]; overlay?: Target | null } = {}): void {
     const gl = this.gl
     this.pass('present', PRESENT, null, (u) => {
       gl.uniform4f(u('uView'), view[0], view[1], view[2], view[3])
       gl.uniform1i(u('uSplit'), opts.before ? 1 : 0)
       gl.uniform1f(u('uSplitAt'), opts.splitAt ?? 0.5)
       gl.uniform3fv(u('uBg'), opts.bg ?? [0.07, 0.07, 0.07])
+      gl.uniform1i(u('uOverlay'), opts.overlay ? 1 : 0)
     }, [
       ['uImage', img.tex],
-      ['uBefore', (opts.before ?? img).tex]
+      ['uBefore', (opts.before ?? img).tex],
+      ['uMaskTex', (opts.overlay ?? img).tex]
     ])
   }
 

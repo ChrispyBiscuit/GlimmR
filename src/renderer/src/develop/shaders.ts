@@ -132,14 +132,20 @@ uniform vec3 uLutMax;
 uniform sampler2D uShaper;
 uniform int uShaperSize;
 uniform vec2 uShaperRange;
+// Layers: per-pixel sums (local1: exposure, contrast, highlights, shadows; local2: temp, tint, saturation).
+uniform bool uLocalOn;
+uniform sampler2D uLocal1;
+uniform sampler2D uLocal2;
+vec4 L1 = vec4(0.0);
+vec4 L2 = vec4(0.0);
 
 vec3 toneScene(vec3 c, float local) {
   float ws = 1.0 - sstep(-4.0, 0.0, local);
   float wh = sstep(0.0, 3.0, local);
-  float g = exp2(uShadows * 1.6 * ws + uHighlights * 1.6 * wh);
+  float g = exp2((uShadows + L1.a) * 1.6 * ws + (uHighlights + L1.b) * 1.6 * wh);
   vec3 x = c * g;
   float l = log2(max(luma(x), 1e-6) / GREY);
-  return x * exp2(l * uContrast);
+  return x * exp2(l * (uContrast + L1.g));
 }
 
 float toneCurve(float Y) {
@@ -209,7 +215,7 @@ vec3 colorStage(vec3 c) {
   float hn = (mod(mod(h, 360.0) + 360.0, 360.0) - 50.0) / 25.0;
   float skin = exp(-(hn * hn));
   C *= 1.0 + uVibrance * (1.0 - sstep(0.0, 0.22, C)) * (1.0 - 0.5 * skin);
-  C *= max(0.0, 1.0 + uSaturation);
+  C *= max(0.0, 1.0 + uSaturation) * max(0.0, 1.0 + L2.b);
   if (uBw) { L += sb * 0.25 * cw; C = 0.0; }
   float hr = radians(h);
   return clamp(fromOklab(vec3(L, C * cos(hr), C * sin(hr))), 0.0, 1.0);
@@ -268,6 +274,10 @@ vec3 lutStage(vec3 c) {
 void main() {
   ivec2 p = ivec2(gl_FragCoord.xy);
   vec4 s = texelFetch(uScene, p, 0);
+  if (uLocalOn) {
+    L1 = texelFetch(uLocal1, p, 0);
+    L2 = texelFetch(uLocal2, p, 0);
+  }
   vec2 g = (vec2(p) + 0.5 + uGridMap.xy) / uGridMap.zw;
   float local = texture(uGrid, g).r;
   vec3 t = toneScene(s.rgb, local);
@@ -340,10 +350,105 @@ uniform bool uSplit;
 uniform float uSplitAt;
 uniform vec4 uView; // image rect on screen in uv units: x, y, width, height
 uniform vec3 uBg;
+uniform bool uOverlay;
+uniform sampler2D uMaskTex;
 void main() {
   vec2 q = (uv - uView.xy) / uView.zw;
   if (q.x < 0.0 || q.y < 0.0 || q.x > 1.0 || q.y > 1.0) { frag = vec4(uBg, 1.0); return; }
   q.y = 1.0 - q.y;
   vec3 c = uSplit && uv.x < uSplitAt ? texture(uBefore, q).rgb : texture(uImage, q).rgb;
+  if (uOverlay) c = mix(c, vec3(1.0, 0.18, 0.18), 0.6 * clamp(texture(uMaskTex, q).r, 0.0, 1.0));
   frag = vec4(c, 1.0);
 }`
+
+// ---- layers ----
+
+/** Brush dabs: one instanced quad per dab, placed in this source (a tile or the whole picture). */
+export const VERT_DAB = `#version 300 es
+in vec2 pos;
+in vec2 center; // fractions of the whole picture's width and height
+uniform vec4 uMap; // xy: this source's offset in the whole picture (pixels), zw: whole picture size
+uniform vec2 uSrcSize;
+uniform float uRadius; // fraction of the long edge
+out vec2 offs;
+void main() {
+  offs = pos;
+  float L = max(uMap.z, uMap.w);
+  vec2 px = center * uMap.zw - uMap.xy + pos * uRadius * L;
+  gl_Position = vec4(px / uSrcSize * 2.0 - 1.0, 0.0, 1.0);
+}`
+
+export const DAB = `${COMMON}
+in vec2 offs;
+uniform float uFeather;
+uniform float uDensity;
+void main() {
+  float a = uDensity * (1.0 - sstep(1.0 - uFeather, 1.0001, length(offs)));
+  frag = vec4(a, a, a, a);
+}`
+
+/** Linear and radial gradients, over the whole source (blended with MAX). */
+export const GRADIENT = `${COMMON}
+uniform vec4 uMap;
+uniform int uKind; // 1 linear, 2 radial
+uniform vec4 uA; // linear: x0 y0 x1 y1; radial: cx cy rx ry
+uniform vec3 uB; // radial: angle, feather, invert
+void main() {
+  vec2 n = (gl_FragCoord.xy + uMap.xy) / uMap.zw;
+  float L = max(uMap.z, uMap.w);
+  vec2 asp = uMap.zw / L;
+  float a = 0.0;
+  if (uKind == 1) {
+    vec2 d = (uA.zw - uA.xy) * asp;
+    float len2 = dot(d, d);
+    if (len2 > 1e-12) a = 1.0 - sstep(0.0, 1.0, dot((n - uA.xy) * asp, d) / len2);
+  } else {
+    vec2 p = (n - uA.xy) * asp;
+    float c = cos(uB.x), s = sin(uB.x);
+    vec2 q = vec2((p.x * c + p.y * s) / uA.z, (-p.x * s + p.y * c) / uA.w);
+    a = 1.0 - sstep(1.0 - uB.y, 1.0001, length(q));
+    if (uB.z > 0.5) a = 1.0 - a;
+  }
+  frag = vec4(a, a, a, a);
+}`
+
+/** A layer's mask (after range, invert and opacity) times its adjustments, added into the parameter textures. */
+export const LAYER_ACC = `${COMMON}
+uniform sampler2D uMask;
+uniform sampler2D uScene;
+uniform int uWhich; // 1: local1, 2: local2, 3: the mask itself (for the overlay)
+uniform float uOpacity;
+uniform bool uInvert;
+uniform bool uRangeOn;
+uniform vec3 uRange; // lo, hi, feather
+uniform vec4 uAdj1; // exposure, contrast, highlights, shadows
+uniform vec4 uAdj2; // temp, tint, saturation, 0
+void main() {
+  ivec2 p = ivec2(gl_FragCoord.xy);
+  float m = texelFetch(uMask, p, 0).r;
+  if (uRangeOn) {
+    float lum = srgbEncode(clamp(luma(texelFetch(uScene, p, 0).rgb), 0.0, 1.0));
+    float f = max(1e-4, uRange.z);
+    m *= sstep(uRange.x - f, uRange.x, lum) * (1.0 - sstep(uRange.y, uRange.y + f, lum));
+  }
+  if (uInvert) m = 1.0 - m;
+  m *= uOpacity;
+  frag = uWhich == 1 ? uAdj1 * m : uWhich == 2 ? uAdj2 * m : vec4(m, m, m, 1.0);
+}`
+
+/** Layers' exposure and white balance on the scene (and its log brightness, for the grid). */
+export const LOCAL_SCENE = `${COMMON}
+uniform sampler2D uScene;
+uniform sampler2D uLocal1;
+uniform sampler2D uLocal2;
+void main() {
+  ivec2 p = ivec2(gl_FragCoord.xy);
+  vec3 c = texelFetch(uScene, p, 0).rgb;
+  vec4 l1 = texelFetch(uLocal1, p, 0);
+  vec4 l2 = texelFetch(uLocal2, p, 0);
+  vec3 m = vec3(exp2(0.3 * l2.r + 0.15 * l2.g), exp2(-0.3 * l2.g), exp2(-0.3 * l2.r + 0.15 * l2.g));
+  m /= luma(m);
+  vec3 r = c * exp2(l1.r) * m;
+  frag = vec4(r, log2(max(luma(r), 1e-5) / GREY));
+}`
+
