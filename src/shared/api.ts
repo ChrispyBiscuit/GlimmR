@@ -23,6 +23,7 @@ import type {
   FileOpResult,
   FolderRef,
   ImportMarks,
+  DuplicateGroup,
   ImportOptions,
   ImportResult,
   ImportSource,
@@ -142,6 +143,16 @@ export interface Api {
   closeImportSource(token: string): void
   /** Copies the chosen photos with verification, catalogs them and applies the card marks. */
   runImport(token: string, opts: ImportOptions, marks: ImportMarks): Promise<ImportResult & { error?: string }>
+  // duplicates
+  /** Groups of exact copies and same-picture copies, with a suggested photo to keep in each. */
+  duplicates(): Promise<DuplicateGroup[]>
+  /** How many likely duplicate groups there are (cheap; for the sidebar). */
+  duplicateCount(): number
+  /** Keeps one photo per group: marks, keywords and albums move to it, the other files go to the trash. */
+  mergeDuplicates(groups: { keep: number; drop: number[] }[]): Promise<{ merged: number; error?: string }>
+  /** Remembers that these photos aren't duplicates of each other. */
+  notDuplicates(ids: number[]): void
+
   /** The most recent import, for the sidebar. */
   lastImport(): { id: number; label: string; finishedAt: number; count: number } | null
   /** Whether two library folders are on the same drive (moves between drives copy by default). */

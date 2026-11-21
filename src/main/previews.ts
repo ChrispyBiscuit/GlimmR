@@ -11,6 +11,7 @@ import { RAW_EXTS, readExifThumbnail } from './metadata'
 import { decodeFile, hasDecoder, type Decoded } from './decode'
 import { x3fPreview } from './decode/x3f'
 import { attachIccToPng } from './print/compose'
+import crypto from 'node:crypto'
 import { effectiveCrop, fitCrop, frameSize, isEdited, type PhotoEdit } from '../shared/edit'
 
 sharp.concurrency(Math.max(1, Math.min(4, os.cpus().length - 1)))
@@ -222,13 +223,19 @@ export async function applyEdit(upright: Sharp, e: PhotoEdit): Promise<Sharp> {
   return sharp(turned.data, raw(turned.info)).extract({ left, top, width, height })
 }
 
-const inflight = new Map<string, Promise<{ width: number; height: number } | null>>()
+const inflight = new Map<string, Promise<{ width: number; height: number; pixelHash: string } | null>>()
 
 /**
  * Generates a photo's previews: the upright preview, plus the edited one when there's an edit, and the thumbnail
  * from whichever is shown. Concurrent calls for the same photo share one job.
  */
-export function generatePreviews(file: string, ext: string, exifOrientation: number, out: PreviewPaths, edit: PhotoEdit | null = null): Promise<{ width: number; height: number } | null> {
+export function generatePreviews(
+  file: string,
+  ext: string,
+  exifOrientation: number,
+  out: PreviewPaths,
+  edit: PhotoEdit | null = null
+): Promise<{ width: number; height: number; pixelHash: string } | null> {
   const existing = inflight.get(out.thumb)
   if (existing) return existing
   const job = (async () => {
@@ -248,10 +255,18 @@ export function generatePreviews(file: string, ext: string, exifOrientation: num
       await fs.promises.writeFile(out.view, shown)
     } else await fs.promises.rm(out.view, { force: true })
     await sharp(shown).resize(THUMB_SIZE, THUMB_SIZE, { fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 78 }).toFile(out.thumb)
-    return size
+    // For finding the same picture under another name (see duplicates.ts): from the unedited preview.
+    const hash = await pixelHash(preview)
+    return size ? { ...size, pixelHash: hash } : null
   })().finally(() => inflight.delete(out.thumb))
   inflight.set(out.thumb, job)
   return job
+}
+
+/** A hash of the picture itself (see duplicates.ts): the upright preview reduced to 64×64. */
+export async function pixelHash(preview: Buffer | string): Promise<string> {
+  const px = await sharp(preview).resize(64, 64, { fit: 'fill' }).removeAlpha().raw().toBuffer()
+  return crypto.createHash('sha1').update(px).digest('hex')
 }
 
 /** A plain upright preview of a file (no edit), e.g. a pair's RAW. */

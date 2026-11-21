@@ -223,6 +223,20 @@ export interface AppSettings {
   import: ImportSettings
 }
 
+export interface DuplicatePhoto extends Photo {
+  keywordCount: number
+  albumCount: number
+}
+
+export interface DuplicateGroup {
+  key: string
+  /** exact: the same file. picture: the same pixels, different file (metadata or name differ). */
+  tier: 'exact' | 'picture'
+  photos: DuplicatePhoto[]
+  /** The suggested photo to keep. */
+  keeper: number
+}
+
 export interface ImportSettings {
   /** What happens when a camera card is inserted. */
   onCard: 'off' | 'ask' | 'open'

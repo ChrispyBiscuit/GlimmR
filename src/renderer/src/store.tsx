@@ -19,7 +19,7 @@ import type {
   Volume
 } from '../../shared/types'
 
-export type View = 'rediscover' | 'browse' | 'settings'
+export type View = 'rediscover' | 'browse' | 'settings' | 'duplicates'
 
 const BIN = navigator.userAgent.includes('Mac') ? 'Trash' : 'Recycle Bin'
 
@@ -424,6 +424,7 @@ function useStoreValue() {
     settingsSection,
     openSettings,
     closeSettings,
+    openDuplicates: () => setView('duplicates'),
     back,
     forward,
     canBack,

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { BookImage, ChevronRight, Clock, Flag, Folder, HardDriveDownload, Images, Plus, Sparkles, Tag, WandSparkles, X } from 'lucide-react'
+import { BookImage, ChevronRight, Clock, Copy, Flag, Folder, HardDriveDownload, Images, Plus, Sparkles, Tag, WandSparkles, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuShortcut, ContextMenuTrigger } from '@/components/ui/context-menu'
@@ -181,7 +181,11 @@ export function Sidebar({ onAddFolder }: { onAddFolder: () => void }) {
   const s = useStore()
   const [kwFilter, setKwFilter] = useState('')
   const [lastImport, setLastImport] = useState<{ id: number; label: string; count: number } | null>(null)
-  useEffect(() => void api.lastImport().then(setLastImport), [s.libraryVersion, s.roots])
+  const [dupCount, setDupCount] = useState(0)
+  useEffect(() => {
+    void api.lastImport().then(setLastImport)
+    void api.duplicateCount().then(setDupCount)
+  }, [s.libraryVersion, s.roots])
   const browsing = s.view === 'browse'
   const is = (scope: Scope): boolean => browsing && sameScope(s.scope, scope)
 
@@ -273,6 +277,7 @@ export function Sidebar({ onAddFolder }: { onAddFolder: () => void }) {
           <NavItem icon={<Images />} label="Photos" active={is({ type: 'all' })} onClick={() => s.navigate({ type: 'all' }, 'Photos')} />
           <NavItem icon={<Flag />} label="Picks" active={is({ type: 'picks' })} onClick={() => s.navigate({ type: 'picks' }, 'Picks')} />
           <NavItem icon={<Clock />} label="Recently added" active={is({ type: 'recent' })} onClick={() => s.navigate({ type: 'recent' }, 'Recently added')} />
+          <NavItem icon={<Copy />} label="Duplicates" count={dupCount || undefined} active={s.view === 'duplicates'} onClick={() => s.openDuplicates()} />
           {lastImport && lastImport.count > 0 && (
             <NavItem
               icon={<HardDriveDownload />}

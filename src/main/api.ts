@@ -14,6 +14,7 @@ import { fontCss, listPrinters, pdfHtml, printHtml } from './print/printer'
 import { displayFile, photoFiles } from './files'
 import { trashSet } from './fileops'
 import { closeSource, finishImport, readSource, runImport } from './importer'
+import { findDuplicates, fingerprintLibrary, markNotDuplicates, mergeGroup } from './duplicates'
 import { absOf, rootPath, conflictsFor, createFolder, deleteFolder, folderStats, moveFolder, putInFolder, type FolderDeps } from './folders'
 import { removeCached } from './scanner'
 import { driverInfo, openWindowsPreferences } from './print/driver'
@@ -23,7 +24,7 @@ import { SORT_FIELDS } from './query'
 import { detectEditors, editorFor, launchEditor, mergeEditors } from './editors'
 import { createBackup, listBackups, mirroredRootPath, readBackup, restoreCatalogFile, verifyBackup } from './backup'
 import type { Api } from '../shared/api'
-import type { Editor, FileOpResult, Histogram, ImportResult, JobProgress, Volume } from '../shared/types'
+import type { DuplicateGroup, Editor, FileOpResult, Histogram, ImportResult, JobProgress, Volume } from '../shared/types'
 import { Updater } from './updater'
 import { generatePreviews, previewPaths } from './previews'
 import { MODEL, Tagger } from './tagging/tagger'
@@ -106,6 +107,9 @@ export class AppContext {
           return r
         })
       }
+      // Fingerprints for duplicates, for photos cataloged before Glimmr kept them.
+      const missing = this.library.db.prepare('SELECT 1 FROM photos WHERE offline = 0 AND (quick_hash IS NULL OR (pixel_hash IS NULL AND has_preview = 1)) LIMIT 1').get()
+      if (missing) await this.runJob('files', 'Fingerprinting photos', (report, signal) => fingerprintLibrary(this.library.db, this.cacheDir, report, signal))
       void this.tagLibrary()
     })
     return this.scanQueue
@@ -600,6 +604,33 @@ export function createApi(ctx: AppContext): Api {
       const { copied: _copied, ...summary } = result
       return summary
     },
+    duplicates: async () => {
+      let groups: DuplicateGroup[] = []
+      await ctx.runJob('files', 'Finding duplicates', async (report, signal) => {
+        await fingerprintLibrary(lib().db, ctx.cacheDir, report, signal)
+        report(0, 0, 'Comparing…')
+        groups = await findDuplicates(lib().db, signal)
+      })
+      return groups
+    },
+    duplicateCount: () => {
+      const db = lib().db
+      const q = (col: string): number =>
+        (db.prepare(`SELECT COUNT(*) AS c FROM (SELECT 1 FROM photos WHERE offline = 0 AND ${col} IS NOT NULL GROUP BY ${col === 'quick_hash' ? 'size, quick_hash' : col} HAVING COUNT(*) > 1)`).get() as { c: number }).c
+      return Math.max(q('quick_hash'), q('pixel_hash'))
+    },
+    mergeDuplicates: async (groups) => {
+      let merged = 0
+      let error: string | undefined
+      for (const g of groups) {
+        const r = await mergeGroup(lib().db, ctx.cacheDir, g.keep, g.drop, (f) => shell.trashItem(f))
+        merged += r.merged
+        error ??= r.error
+      }
+      ctx.emit('library-changed')
+      return { merged, error }
+    },
+    notDuplicates: (ids) => markNotDuplicates(lib().db, ids),
     lastImport: () => {
       const id = lib().getSettings().import.lastImportId
       if (!id) return null

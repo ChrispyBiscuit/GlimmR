@@ -17,6 +17,7 @@ import { PrintView } from './PrintView'
 import { LibraryCull } from './LibraryCull'
 import { ImportView } from './ImportView'
 import { ImportButton } from './ImportButton'
+import { DuplicatesView } from './DuplicatesView'
 
 const mac = navigator.userAgent.includes('Mac')
 
@@ -121,6 +122,8 @@ export function Shell() {
             <Rediscover />
           ) : s.view === 'settings' ? (
             <SettingsPage />
+          ) : s.view === 'duplicates' ? (
+            <DuplicatesView />
           ) : (
             <Browse />
           )}

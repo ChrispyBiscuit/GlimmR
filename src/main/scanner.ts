@@ -7,6 +7,7 @@ import { type Db, tx, keywordId, localDay, mergePhotos, parseEdit, reindexFts } 
 import { isSupported, RAW_EXTS, readMetadata, findSidecar, type ExtractedMeta } from './metadata'
 import { generatePreviews, imageSize, previewPaths } from './previews'
 import { DISPLAY_EXTS } from './files'
+import { quickHash } from './fileops'
 
 const SKIP_DIRS = new Set(['$recycle.bin', 'system volume information', '@eadir', '.trashes', '.spotlight-v100', '.fseventsd', 'node_modules', '.glimmr'])
 
@@ -293,6 +294,8 @@ export async function scanRoot(db: Db, rootId: number, rootPath: string, opts: S
           }
           orientation = meta.exifOrientation
           id = writePhotoRecord(db, rootId, f, meta, id, !!opts.reimport)
+          // Fingerprint for duplicates; a changed file's full hash is stale.
+          db.prepare('UPDATE photos SET quick_hash = ?, sha256 = NULL WHERE id = ?').run(await quickHash(f.abs, f.size).catch(() => null), id)
           if (prior) result.updated++
           else result.added++
           // The camera JPEG was a photo of its own before it was paired: fold its ratings, keywords, albums and edit
@@ -319,6 +322,7 @@ export async function scanRoot(db: Db, rootId: number, rootPath: string, opts: S
             const size = await generatePreviews(shown.abs, shown.ext, orientation, previewPaths(opts.cacheDir, id!), parseEdit(edit))
             // Formats whose metadata has no pixel size (Photoshop, BMP) get it from the decode. So do raw files whose
             // metadata only gave a thumbnail's size (some NEFs): the embedded preview is at least that big.
+            if (size) db.prepare('UPDATE photos SET pixel_hash = ? WHERE id = ?').run(size.pixelHash, id!)
             if (size)
               db.prepare(
                 `UPDATE photos SET width = ?, height = ?, orientation = ? WHERE id = ? AND (width IS NULL OR width = 0 OR height IS NULL OR (kind = 'raw' AND width * height < ?))`
