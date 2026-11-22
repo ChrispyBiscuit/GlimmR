@@ -60,7 +60,7 @@ export function SliderRow({ label, value, min, max, step = 1, def = 0, onChange,
     onCommit()
   }
   return (
-    <div className={cn('grid grid-cols-[88px_minmax(0,1fr)_52px] items-center gap-2', disabled && 'opacity-50')}>
+    <div className={cn('grid grid-cols-[80px_minmax(0,1fr)_48px] items-center gap-2', disabled && 'opacity-50')}>
       <button type="button" className="truncate text-left text-[12px] text-ink-muted hover:text-ink" onDoubleClick={reset} title="Double-click to reset" disabled={disabled}>
         {label}
       </button>
@@ -73,7 +73,6 @@ export function SliderRow({ label, value, min, max, step = 1, def = 0, onChange,
         disabled={disabled}
         onValueChange={([v]) => onChange(v)}
         onValueCommit={() => onCommit()}
-        onDoubleClick={reset}
       >
         <SliderPrimitive.Track className="relative h-1 w-full grow overflow-hidden rounded-full bg-white/15" style={track ? ({ background: track } as CSSProperties) : undefined}>
           {!track && <span className="absolute inset-y-0 bg-white/60" style={{ left: `${lo}%`, width: `${hi - lo}%` }} />}

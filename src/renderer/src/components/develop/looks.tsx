@@ -73,9 +73,10 @@ export function LooksPanel({
         } catch {
           // A broken LUT just has no preview.
         }
-        await new Promise((r) => setTimeout(r, 0))
+        // Leave the main thread (and GPU) to the editing between previews.
+        await new Promise((r) => setTimeout(r, 30))
       }
-    }, 400)
+    }, 1500)
     return () => {
       live = false
       clearTimeout(t)

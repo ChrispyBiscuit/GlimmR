@@ -102,7 +102,7 @@ function WhiteBalance({ s, kind, wb, change, commit, eyedropper, setEyedropper }
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-2">
-        <span className="w-[88px] text-[12px] text-ink-muted">White balance</span>
+        <span className="w-[80px] text-[12px] text-ink-muted">White balance</span>
         <Select
           value={s.wb.mode}
           onValueChange={(m) => {
@@ -336,7 +336,7 @@ function Look({ s, kind, change, commit, luts, open, setOpen }: PanelProps) {
       commit()
     }}>
       <div className="flex items-center gap-2">
-        <span className="w-[88px] text-[12px] text-ink-muted">LUT</span>
+        <span className="w-[80px] text-[12px] text-ink-muted">LUT</span>
         <Select
           value={l.lut ?? 'none'}
           onValueChange={(v) => {
@@ -362,7 +362,7 @@ function Look({ s, kind, change, commit, luts, open, setOpen }: PanelProps) {
       </div>
       <SliderRow label="Amount" value={Math.round(l.amount * 100)} def={100} min={0} max={100} format={(v) => `${v}%`} disabled={!l.lut} onChange={(v) => change('LUT amount', (x) => ({ ...x, look: { ...x.look, amount: v / 100 } }))} onCommit={commit} />
       <div className="flex items-center gap-2">
-        <span className="w-[88px] text-[12px] text-ink-muted">Made for</span>
+        <span className="w-[80px] text-[12px] text-ink-muted">Made for</span>
         <Select
           value={l.space}
           disabled={!l.lut}

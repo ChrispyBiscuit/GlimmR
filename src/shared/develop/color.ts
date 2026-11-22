@@ -83,7 +83,10 @@ const uvToXY = (u: number, v: number): [number, number] => {
   return [(3 * u) / d, (2 * v) / d]
 }
 
-/** Tint is the distance from the Planckian locus: +150 tint is 0.05 Δuv towards magenta (below the locus). */
+/**
+ * Tint is the distance from the Planckian locus, signed as in Lightroom and the DNG SDK: positive tint makes the photo
+ * more magenta, so it names a light that is greener (above the locus). 150 is 0.05 Δuv.
+ */
 const TINT_SCALE = 3000
 
 /** The white point (xy) for a colour temperature (K) and tint. */
@@ -100,7 +103,8 @@ export function whiteXY(T: number, tint: number): [number, number] {
     nx = -nx
     ny = -ny
   }
-  const d = tint / TINT_SCALE
+  // (nx, ny) points below the locus (magenta light); positive tint is a greener light.
+  const d = -tint / TINT_SCALE
   return uvToXY(u + nx * d, v + ny * d)
 }
 
@@ -136,7 +140,7 @@ export function tempTintOf(x: number, y: number): { temp: number; tint: number }
     else lo = a
   }
   const T = (lo + hi) / 2
-  // Tint: signed distance from the locus, positive below it.
+  // Tint: signed distance from the locus, in the direction whiteXY uses.
   const [w0, w1] = whiteXY(T, 0)
   const [pu, pv] = xyToUV(w0, w1)
   const [qu, qv] = xyToUV(...whiteXY(T, 1))

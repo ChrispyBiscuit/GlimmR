@@ -952,12 +952,39 @@ export function DevelopView() {
     )
   }
 
+  // The filmstrip only changes with the photos, not with every slider move.
+  const { setDevelop: setDev, cache: photoCache, cacheVersion } = s
+  const strip = useMemo(
+    () =>
+      d.ids.map((pid, i) => {
+          const p = photoCache.get(pid)
+          return (
+            <button
+              key={pid}
+              type="button"
+              aria-current={i === d.index}
+              aria-label={p?.filename ?? `Photo ${i + 1}`}
+              onClick={() => {
+                commit()
+                setDev({ ...d, index: i })
+              }}
+              className={cn('relative h-16 shrink-0 overflow-hidden rounded border-2 border-transparent', i === d.index ? 'border-white' : 'opacity-70 hover:opacity-100')}
+            >
+              {p && <img src={thumbUrl(pid, p.rev)} alt="" className="h-full w-auto object-contain" draggable={false} loading="lazy" />}
+              {p?.developed && <span className="absolute right-1 bottom-1 size-1.5 rounded-full bg-white shadow" aria-label="Edited" />}
+            </button>
+          )
+        }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [d, cacheVersion, commit, setDev]
+  )
+
   const edited = !!settings && (changedGroups(settings, catalogKind).length > 0 || settings.styles.length > 0)
   const cursor = layerObj && (tool === 'brush' || tool === 'erase') ? 'none' : (layerObj && tool) || eyedropper || targeted ? 'crosshair' : zoom ? 'grab' : 'zoom-in'
   const currentSeq = history.length && committed ? (history.findLast((h) => JSON.stringify(h.settings) === JSON.stringify(committed))?.seq ?? null) : null
 
   return (
-    <div className="fixed inset-0 z-50 grid grid-cols-[248px_minmax(0,1fr)_300px] grid-rows-[48px_minmax(0,1fr)_84px] bg-[#111] text-ink" role="dialog" aria-modal="true" aria-label="Develop">
+    <div className="fixed inset-0 z-50 grid grid-cols-[248px_minmax(0,1fr)_340px] grid-rows-[48px_minmax(0,1fr)_84px] bg-[#111] text-ink" role="dialog" aria-modal="true" aria-label="Develop">
       <header className="app-drag titlebar-inset col-span-3 flex items-center gap-2 border-b border-white/10 bg-panel px-2">
         <div className={cn('flex items-center gap-1', mac && 'pl-[76px]')}>
           {iconButton('Back to library', 'Back to library (Esc)', <ArrowLeft />, close)}
@@ -1189,25 +1216,7 @@ export function DevelopView() {
       </aside>
 
       <div ref={stripRef} className="col-start-2 row-start-3 flex items-center gap-1.5 overflow-x-auto border-t border-white/10 bg-panel px-2" aria-label="Filmstrip">
-        {d.ids.map((pid, i) => {
-          const p = s.cache.get(pid)
-          return (
-            <button
-              key={pid}
-              type="button"
-              aria-current={i === d.index}
-              aria-label={p?.filename ?? `Photo ${i + 1}`}
-              onClick={() => {
-                commit()
-                s.setDevelop({ ...d, index: i })
-              }}
-              className={cn('relative h-16 shrink-0 overflow-hidden rounded border-2 border-transparent', i === d.index ? 'border-white' : 'opacity-70 hover:opacity-100')}
-            >
-              {p && <img src={thumbUrl(pid, p.rev)} alt="" className="h-full w-auto object-contain" draggable={false} loading="lazy" />}
-              {p?.developed && <span className="absolute right-1 bottom-1 size-1.5 rounded-full bg-white shadow" aria-label="Edited" />}
-            </button>
-          )
-        })}
+        {strip}
       </div>
 
       {exportIds && <ExportDialog ids={exportIds} onClose={() => setExportIds(null)} />}

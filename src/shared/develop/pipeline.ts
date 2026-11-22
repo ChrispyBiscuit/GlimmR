@@ -226,8 +226,12 @@ export const logLum = (c: Vec3): number => Math.log2(Math.max(luma(c), 1e-5) / G
 
 /** Stage 2: highlights and shadows (from local brightness), contrast. Scene-referred in and out. */
 export function toneScene(p: Params, c: Vec3, local: number, loc: Local = ZERO_LOCAL): Vec3 {
-  const ws = 1 - smoothstep(-4, 0, local)
-  const wh = smoothstep(0, 3, local)
+  // How bright a pixel counts as: mostly its own brightness, so small bright or dark details respond, with a quarter
+  // of its neighbourhood's, which keeps the change smooth and preserves some local contrast. The weights rise slowly
+  // enough that the result stays monotonic (a brighter pixel never ends up darker) at full strength.
+  const b = 0.75 * Math.log2(Math.max(luma(c), 1e-6) / GREY) + 0.25 * local
+  const ws = 1 - smoothstep(-4, 0, b)
+  const wh = smoothstep(-0.5, 2, b)
   const g = Math.pow(2, (p.shadows + loc.shadows) * 1.6 * ws + (p.highlights + loc.highlights) * 1.6 * wh)
   let x: Vec3 = [c[0] * g, c[1] * g, c[2] * g]
   const l = Math.log2(Math.max(luma(x), 1e-6) / GREY)

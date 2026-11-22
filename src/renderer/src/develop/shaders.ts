@@ -140,8 +140,9 @@ vec4 L1 = vec4(0.0);
 vec4 L2 = vec4(0.0);
 
 vec3 toneScene(vec3 c, float local) {
-  float ws = 1.0 - sstep(-4.0, 0.0, local);
-  float wh = sstep(0.0, 3.0, local);
+  float b = 0.75 * log2(max(luma(c), 1e-6) / GREY) + 0.25 * local;
+  float ws = 1.0 - sstep(-4.0, 0.0, b);
+  float wh = sstep(-0.5, 2.0, b);
   float g = exp2((uShadows + L1.a) * 1.6 * ws + (uHighlights + L1.b) * 1.6 * wh);
   vec3 x = c * g;
   float l = log2(max(luma(x), 1e-6) / GREY);
